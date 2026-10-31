@@ -32,6 +32,8 @@ data class BookmarkList(
 @Serializable
 data class TrustedSite(
     val host: String,
+    /** TCP port the certificate was trusted on. 0 means "any port" (legacy data). */
+    val port: Int = 0,
     /** Lower-case hex SHA-256 of the DER certificate, no separators. */
     val fingerprintSha256: String,
     val subject: String = "",

@@ -6,12 +6,12 @@ import com.yukiorita.halfbrowser.data.BookmarkRepository
 import com.yukiorita.halfbrowser.data.CredentialStore
 import com.yukiorita.halfbrowser.data.SettingsRepository
 import com.yukiorita.halfbrowser.data.TrustRepository
-import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.receiveAsFlow
 
 enum class NavEvent { HOME, BROWSER, SETTINGS }
 
@@ -28,11 +28,17 @@ class AppContainer(context: Context) {
     val trust: TrustRepository by lazy { TrustRepository(appContext) }
     val credentials: CredentialStore by lazy { CredentialStore(appContext) }
 
+    private val _trustRevision = MutableStateFlow(0)
+    /** Incremented when the user trusts/revokes a certificate in settings. */
+    val trustRevision: StateFlow<Int> = _trustRevision.asStateFlow()
+
     private val _openRequest = MutableStateFlow<NavigationRequest.Open?>(null)
     val openRequest: StateFlow<NavigationRequest.Open?> = _openRequest.asStateFlow()
 
-    private val _navEvents = MutableSharedFlow<NavEvent>(extraBufferCapacity = 8)
-    val navEvents: SharedFlow<NavEvent> = _navEvents.asSharedFlow()
+    // A Channel (not SharedFlow) so a navigation requested before Compose starts
+    // collecting (a cold start from an external link) is buffered, not dropped.
+    private val _navEvents = Channel<NavEvent>(Channel.BUFFERED)
+    val navEvents: Flow<NavEvent> = _navEvents.receiveAsFlow()
 
     fun requestOpen(
         url: String,
@@ -40,14 +46,18 @@ class AppContainer(context: Context) {
         fromExternalApp: Boolean = false,
     ) {
         _openRequest.value = NavigationRequest.Open(url, bookmarkId, fromExternalApp)
-        _navEvents.tryEmit(NavEvent.BROWSER)
+        _navEvents.trySend(NavEvent.BROWSER)
+    }
+
+    fun notifyTrustChanged() {
+        _trustRevision.value += 1
     }
 
     fun requestHome() {
-        _navEvents.tryEmit(NavEvent.HOME)
+        _navEvents.trySend(NavEvent.HOME)
     }
 
     fun requestSettings() {
-        _navEvents.tryEmit(NavEvent.SETTINGS)
+        _navEvents.trySend(NavEvent.SETTINGS)
     }
 }

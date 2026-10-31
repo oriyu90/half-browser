@@ -1,0 +1,97 @@
+# デバッグ・QA レポート
+
+- 文書ID: HB-DEBUG-001（2026-10-31）
+- 対象: Half-Browser v1.0.0（debug / signed release）
+- 環境: macOS 26（arm64）、Android Emulator `mm_debug`（Android 14 / API 34 / arm64 / 1080×2400 / 420dpi）、
+  JDK 17、AGP 9.1.1、Gradle 9.5.1、Android SDK platform 36.1 / build-tools 36.0.0。
+- テストサーバー: `tools/qa-server/`（自己署名 RSA-2048、`https://192.168.0.165:8844`、HTTP Basic `halfuser` / realm `Half-Browser QA`）。
+  「ローカル HTTPS + 自己署名 + Basic 認証」というユーザー要件の実環境を再現するために用意した。
+
+---
+
+## 1. QA 手順（再現可能）
+
+```bash
+# 1. 自己署名証明書と Basic 認証サーバー
+tools/qa-server/make-cert.sh 192.168.0.165
+(cd tools/qa-server && python3 server.py --port 8844) &
+
+# 2. ビルドとインストール
+./gradlew :app:assembleDebug
+adb install -r app/build/outputs/apk/debug/app-debug.apk
+
+# 3. UI 操作（テキスト一致でタップする補助）
+python3 tools/adb-tap.py "Always trust this site"
+python3 tools/adb-tap.py "Sign in" --last
+
+# 4. 画面・ログ
+adb exec-out screencap -p > shots/xx.png
+adb logcat -b crash -d
+```
+
+実測した項目:
+
+1. 初回アクセス → 証明書インタースティシャル（ホスト / 問題 / 詳細 / SHA-256 / 有効期限）
+2. 「常に信頼」→ Basic 認証ダイアログ → 資格情報入力＋保存 → ページ表示
+3. アプリ再起動 → SSL 警告も認証ダイアログも出ずに自動表示（ピン＋資格情報の永続化）
+4. 設定 → 信頼した証明書の一覧・失効 → 次回読み込みで再警告
+5. 「今回だけ信頼」→ 再起動後に再警告（保存されない）
+6. 設定 → ダーク、日本語、UI 130%、タブレット 1600×2560/320dpi、横向き
+7. 外部アプリ相当の `VIEW` Intent（コールド／ウォーム）→ ブックマーク名つきバーで表示
+8. ホーム画面ショートカットのピン留め（ランチャー確認）、ショートカット起動
+9. リリース APK（R8）で 1–8 の主要経路を再実行
+
+---
+
+## 2. 発見・修正した不具合
+
+| # | 症状 | 根本原因 | 修正 | 検証 |
+|---|---|---|---|---|
+| B-01 | ブラウザ上部バーが表示されず、Web ページがステータスバーまで全面を覆う | `WebView` に `layoutParams = MATCH_PARENT` を設定し、Compose の配置を無視して全画面にレイアウトされていた | `layoutParams` を削除し、`AndroidView` に測定を任せる。コンテンツは `Modifier.weight(1f)` + `clipToBounds` | スクリーンショット `shots/14-browser-chrome.png` |
+| B-02 | ダークテーマで、背景色を指定しないページが黒背景＋黒文字で読めない | WebView の背景をアプリのダーク surface にしていた | ページ面は常に白。ダーク時は WebView の Algorithmic Darkening（機能検出時のみ）に委ねる | `shots/25-browser-ja-dark.png` |
+| B-03 | アプリ起動中に外部リンクを受け取るとホームのまま（遷移しない） | ナビゲーション通知に `MutableSharedFlow` を使用。購読開始前の `tryEmit` が破棄されていた | バッファ付き `Channel` + `receiveAsFlow()` に変更 | コールド／ウォームの `am start -a VIEW` で実測 |
+| B-04 | 設定で証明書を失効しても、開いている WebView では警告が出ない | WebView がプロセス内で SSL 例外の許可を保持していた | `trustRevision` を `AppContainer` で通知し、変更時に WebView を再生成（世代番号）して再読み込み | 失効 → 再読み込みで警告を実測 |
+| B-05 | API 26–28 で証明書フィンガープリントが常に null（「常に信頼」が機能しない） | `SslCertificate.getX509Certificate()` は API 29 以降。`runCatching` が `NoSuchMethodError` を握り潰していた | `saveState()` の Bundle から X.509 を復元。既知キー→Bundle 走査の二段フォールバック。取得不能時は pin を無効化し「今回だけ」のみ許可 | API 34 で経路を確認。**API 26 実機は未検証** |
+| B-06 | リリースビルドが R8 で失敗 | `androidx.security:security-crypto` が参照する Tink のアノテーションクラスが無く、primitive をリフレクションでロードする | `-dontwarn`（errorprone / javax.annotation）と Tink の keep ルールを追加 | `assembleRelease` 成功、実機で資格情報の保存・復号を確認 |
+| B-07 | 署名なしリリースが生成され得る | `signingConfig` を環境変数がある場合だけ設定していた | release は常に署名設定を使用。パスワード未設定なら Gradle が明示的に失敗 | 環境変数なしで `packageRelease` → `SigningConfig "release" is missing required property "storePassword"` を確認 |
+| B-08 | 「外部ブラウザで開く」が自分自身を再度開くことがある | 汎用 `ACTION_VIEW` の解決結果に自パッケージが含まれる | 自パッケージを除外した候補でのみ chooser を表示。候補 0 件はトースト | コード確認・メニュー操作 |
+| B-09 | 証明書の失効後、同じ URL を開き直しても再読み込みされない | `lastRequestedUrl` と同一のため `LaunchedEffect` がロードをスキップ | 失効時に `generation` を進めて WebView を作り直し、現在 URL を再ロード | 失効 → 再読み込みを実測 |
+| B-10 | 「今回だけ信頼」でキャンセルすると白画面のまま | `SslErrorHandler.cancel()` は `onReceivedError` を必ずしも発火しない | キャンセル時にエラーペイン（再試行付き）を明示表示 | `shots/31-ssl-cancel-error.png`（修正前）／修正後はエラーペイン |
+| B-11 | ピンがホスト単位のため、同一ホストの別ポートの証明書と衝突する | 信頼キーが host のみ | `host + port + 証明書 SHA-256` に変更。設定表示も `host:port` | 単体テスト `TrustPolicyTest` |
+| B-12 | 期限切れ・ホスト名不一致の証明書でも「常に信頼」できた | UI がフィンガープリントの有無だけで有効化していた | `TrustPolicy.canPin()` を追加し、`SSL_UNTRUSTED` のみ許可。不可時は説明を表示 | 単体テスト・コード確認 |
+| B-13 | 保存に失敗しても「保存しました」と表示される | `CredentialStore.save()` の戻り値を無視していた | 戻り値を確認し、失敗時は `auth_save_failed` を表示（成功トーストは削除） | コード確認 |
+| B-14 | 証明書変更時に 1 タップで古いピンを上書きできた | 「常に信頼」に二段確認がなかった | `Changed` の場合は確認ダイアログを追加 | コード確認（実機の証明書差し替えは未実施） |
+| B-15 | 認証の自動入力が 2 回失敗すると同一画面で復活しない | 試行カウンタをリセットしていなかった | ページ表示コミット時にホストのカウンタをクリア（`onPageCommitVisible`） | 単体テスト `AuthAttemptTrackerTest` |
+| B-16 | 同一ホストのサブリソースの SSL エラーがメインの判断を置き換える | すべての `SslError` でダイアログを出していた | メインフレーム URL と一致する場合のみダイアログ。サブリソースは拒否 | コード確認 |
+| B-17 | `intent://` が任意の VIEW アプリを起動し得る（intent redirection） | `Intent.parseUri` の復元 Intent を chooser に渡していた | `intent://` は一切起動しない。`S.browser_fallback_url` のみ http(s) 検証して読み込み | コード確認・独立レビュー反映 |
+
+---
+
+## 3. クラッシュ・ログ確認
+
+- `adb logcat -b crash -d`: debug / release の QA 期間を通じて **FATAL 0 件**。
+- R8 リリースで `kotlinx.serialization`（ブックマーク・信頼・設定）と Tink（資格情報）の
+  動作を実機で確認（再起動後の自動入力が成立）。
+- WebView レンダラ強制終了（`chrome://crash`）は未実施。`onRenderProcessGone` の実装のみ確認。
+
+---
+
+## 4. 未実施・残課題
+
+| 項目 | 理由 | 次の一手 |
+|---|---|---|
+| API 26–28 実機での証明書ピン | システムイメージが API 34 のみ | `sdkmanager "system-images;android-26;google_apis;arm64-v8a"` で AVD を作成し、`SslCertificate.saveState` 経路を実測 |
+| ファイル選択（`<input type="file">`） | スコープ外 | `onShowFileChooser` + ActivityResult |
+| レンダラ強制終了 | 時間・手法の制約 | `chrome://crash` または `adb shell am crash` で UI 復帰を確認 |
+| 巨大ページ・500 ブックマークの性能 | 未測定 | Macrobenchmark / 実データ |
+| 折りたたみ・RTL・TalkBack | 未検証 | 実機／エミュレータの追加マトリクス |
+| 証明書差し替え（Changed）の実機確認 | QA サーバーの証明書を再生成して実施可能 | 手順は `tools/qa-server/make-cert.sh` の再実行 |
+
+---
+
+## 5. 再発防止
+
+1. **実機でしか出ない不具合**（B-01, B-02, B-03, B-04）を優先して確認する。静的テスト・lint だけでは検出できない。
+2. WebView の設定はセキュリティ関連を先頭に、**個別の `runCatching`** で適用する（1 つの失敗で後続を止めない）。
+3. 外部入力（Intent、URL、SSL 証明書、Basic 認証の realm）はすべて長さ・スキーム・canonical 一致で検証する。
+4. リリースは「ビルド成功」ではなく、**署名検証 → 実機インストール → 主要経路の再実行**までを 1 セットとする。

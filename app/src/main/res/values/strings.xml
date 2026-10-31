@@ -86,6 +86,8 @@
     <string name="toast_share_failed">Could not share this page.</string>
     <string name="toast_desktop_enabled">Requesting the desktop site</string>
     <string name="toast_desktop_disabled">Requesting the mobile site</string>
+    <string name="toast_download_started">Download started</string>
+    <string name="toast_download_failed">Could not start the download</string>
     <string name="toast_cleared">Browsing data cleared</string>
     <string name="toast_invalid_url">Enter a valid address.</string>
     <string name="toast_no_url">There is no address to share yet.</string>
@@ -102,6 +104,9 @@
     <string name="ssl_validity">Valid until</string>
     <string name="ssl_trust_once">Trust once</string>
     <string name="ssl_trust_always">Always trust this site</string>
+    <string name="ssl_changed_confirm_title">Replace the trusted certificate?</string>
+    <string name="ssl_changed_confirm_message">The certificate for %1$s differs from the one you trusted before. Continue only if you changed the server or its certificate.</string>
+    <string name="ssl_changed_confirm_action">Trust the new certificate</string>
     <string name="ssl_go_back">Go back</string>
     <string name="ssl_trusted_toast">Certificate trusted for %1$s</string>
     <string name="ssl_scope_note">Trust is stored for this host and this exact certificate. If the certificate changes, you will be asked again.</string>
@@ -128,6 +133,10 @@
     <string name="auth_saved">Sign-in saved</string>
     <string name="auth_show_password">Show password</string>
     <string name="auth_hide_password">Hide password</string>
+    <string name="auth_insecure_http">This page uses HTTP, so the password would travel unencrypted. Half-Browser will not save it.</string>
+    <string name="toast_link_not_opened">This link cannot be opened safely.</string>
+    <string name="auth_save_failed">Could not save the sign-in.</string>
+    <string name="ssl_pin_unavailable">This certificate cannot be remembered. You can continue for this visit only.</string>
     <string name="auth_not_persistent">Secure storage is unavailable on this device. This sign-in will not be saved.</string>
 
     <!-- Settings -->

@@ -1,23 +1,752 @@
 package com.yukiorita.halfbrowser.ui.settings
 
+import android.app.Activity
+import android.content.Context
+import android.content.Intent
+import android.os.Build
+import android.webkit.CookieManager
+import android.webkit.WebStorage
+import android.webkit.WebView
+import androidx.activity.compose.BackHandler
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Language
+import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material.icons.filled.OpenInNew
+import androidx.compose.material.icons.filled.Public
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilterChip
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.RadioButton
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Slider
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.unit.dp
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.yukiorita.halfbrowser.AppContainer
+import com.yukiorita.halfbrowser.BuildConfig
+import com.yukiorita.halfbrowser.R
+import com.yukiorita.halfbrowser.core.AppSettings
+import com.yukiorita.halfbrowser.core.CredentialMeta
+import com.yukiorita.halfbrowser.core.LanguageMode
+import com.yukiorita.halfbrowser.core.SearchEngine
+import com.yukiorita.halfbrowser.core.ThemeMode
+import com.yukiorita.halfbrowser.core.TrustPolicy
+import com.yukiorita.halfbrowser.ui.components.DefaultBrowser
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
+import kotlin.math.roundToInt
 
-/**
- * Placeholder replaced by the settings implementation.
- * Contract: (container, onBack).
- */
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SettingsScreen(
     container: AppContainer,
     onBack: () -> Unit,
 ) {
-    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-        Text("SettingsScreen")
+    val context = LocalContext.current
+    val settings by container.settings.settings.collectAsStateWithLifecycle()
+    val trustedSites by container.trust.sites.collectAsStateWithLifecycle()
+    var credentials by remember { mutableStateOf(container.credentials.all()) }
+    var credentialToDelete by remember { mutableStateOf<CredentialMeta?>(null) }
+    var confirmClear by remember { mutableStateOf(false) }
+
+    val roleSupported = remember { DefaultBrowser.isSupported(context) }
+    var isDefaultBrowser by remember { mutableStateOf(DefaultBrowser.isDefault(context)) }
+    val roleLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.StartActivityForResult(),
+    ) { isDefaultBrowser = DefaultBrowser.isDefault(context) }
+
+    val lifecycleOwner = LocalLifecycleOwner.current
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) {
+                isDefaultBrowser = DefaultBrowser.isDefault(context)
+                credentials = container.credentials.all()
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
     }
+
+    BackHandler(onBack = onBack)
+
+    Scaffold(
+        containerColor = MaterialTheme.colorScheme.background,
+        topBar = {
+            TopAppBar(
+                title = { Text(stringResource(R.string.settings_title)) },
+                navigationIcon = {
+                    IconButton(onClick = onBack) {
+                        Icon(
+                            Icons.AutoMirrored.Filled.ArrowBack,
+                            contentDescription = stringResource(R.string.action_back),
+                        )
+                    }
+                },
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = MaterialTheme.colorScheme.background,
+                ),
+            )
+        },
+    ) { innerPadding ->
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(innerPadding),
+            contentAlignment = Alignment.TopCenter,
+        ) {
+            LazyColumn(
+                modifier = Modifier
+                    .widthIn(max = 760.dp)
+                    .fillMaxWidth(),
+                contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 48.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                item {
+                    SettingsCard(title = stringResource(R.string.settings_section_appearance)) {
+                        Text(
+                            text = stringResource(R.string.settings_theme),
+                            style = MaterialTheme.typography.bodyMedium,
+                        )
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            ThemeMode.entries.forEach { mode ->
+                                FilterChip(
+                                    selected = settings.themeMode == mode,
+                                    onClick = {
+                                        container.settings.update { it.copy(themeMode = mode) }
+                                    },
+                                    label = {
+                                        Text(
+                                            stringResource(
+                                                when (mode) {
+                                                    ThemeMode.SYSTEM -> R.string.settings_theme_system
+                                                    ThemeMode.LIGHT -> R.string.settings_theme_light
+                                                    ThemeMode.DARK -> R.string.settings_theme_dark
+                                                },
+                                            ),
+                                        )
+                                    },
+                                )
+                            }
+                        }
+                        SwitchRow(
+                            title = stringResource(R.string.settings_dynamic_color),
+                            description = stringResource(R.string.settings_dynamic_color_desc),
+                            checked = settings.dynamicColor,
+                            enabled = Build.VERSION.SDK_INT >= Build.VERSION_CODES.S,
+                            onCheckedChange = {
+                                container.settings.update { current -> current.copy(dynamicColor = it) }
+                            },
+                        )
+                        HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
+                        Text(
+                            text = stringResource(R.string.settings_language),
+                            style = MaterialTheme.typography.bodyMedium,
+                        )
+                        LanguageMode.entries.forEach { mode ->
+                            RadioRow(
+                                selected = settings.language == mode,
+                                label = stringResource(
+                                    when (mode) {
+                                        LanguageMode.SYSTEM -> R.string.settings_language_system
+                                        LanguageMode.JAPANESE -> R.string.settings_language_ja
+                                        LanguageMode.ENGLISH -> R.string.settings_language_en
+                                    },
+                                ),
+                                onClick = {
+                                    if (settings.language != mode) {
+                                        container.settings.update { it.copy(language = mode) }
+                                        (context as? Activity)?.recreate()
+                                    }
+                                },
+                            )
+                        }
+                        Text(
+                            text = stringResource(R.string.settings_language_note),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                }
+
+                item {
+                    SettingsCard(title = stringResource(R.string.settings_section_display)) {
+                        ScaleSlider(
+                            label = stringResource(R.string.settings_ui_scale),
+                            initial = settings.uiScale,
+                            min = AppSettings.MIN_UI_SCALE,
+                            max = AppSettings.MAX_UI_SCALE,
+                            onCommit = { value ->
+                                container.settings.update { it.copy(uiScale = value) }
+                            },
+                        )
+                        ScaleSlider(
+                            label = stringResource(R.string.settings_font_scale),
+                            initial = settings.fontScale,
+                            min = AppSettings.MIN_FONT_SCALE,
+                            max = AppSettings.MAX_FONT_SCALE,
+                            onCommit = { value ->
+                                container.settings.update { it.copy(fontScale = value) }
+                            },
+                        )
+                        TextButton(
+                            onClick = {
+                                container.settings.update {
+                                    it.copy(uiScale = 1f, fontScale = 1f)
+                                }
+                            },
+                        ) {
+                            Text(stringResource(R.string.settings_scale_reset))
+                        }
+                        HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
+                        Text(
+                            text = stringResource(R.string.settings_grid_columns),
+                            style = MaterialTheme.typography.bodyMedium,
+                        )
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .horizontalScroll(rememberScrollState()),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        ) {
+                            FilterChip(
+                                selected = settings.gridColumns == 0,
+                                onClick = {
+                                    container.settings.update { it.copy(gridColumns = 0) }
+                                },
+                                label = { Text(stringResource(R.string.settings_grid_auto)) },
+                            )
+                            listOf(3, 4, 5, 6, 8).forEach { count ->
+                                FilterChip(
+                                    selected = settings.gridColumns == count,
+                                    onClick = {
+                                        container.settings.update { it.copy(gridColumns = count) }
+                                    },
+                                    label = { Text(stringResource(R.string.settings_grid_n, count)) },
+                                )
+                            }
+                        }
+                    }
+                }
+
+                item {
+                    SettingsCard(title = stringResource(R.string.settings_section_search)) {
+                        Text(
+                            text = stringResource(R.string.settings_search_engine),
+                            style = MaterialTheme.typography.bodyMedium,
+                        )
+                        SearchEngine.entries.forEach { engine ->
+                            RadioRow(
+                                selected = settings.searchEngine == engine,
+                                label = when (engine) {
+                                    SearchEngine.GOOGLE -> "Google"
+                                    SearchEngine.DUCKDUCKGO -> "DuckDuckGo"
+                                    SearchEngine.BING -> "Bing"
+                                },
+                                onClick = {
+                                    container.settings.update { it.copy(searchEngine = engine) }
+                                },
+                            )
+                        }
+                    }
+                }
+
+                item {
+                    SettingsCard(title = stringResource(R.string.settings_section_security)) {
+                        Text(
+                            text = stringResource(R.string.settings_trusted_sites),
+                            style = MaterialTheme.typography.titleSmall,
+                        )
+                        Text(
+                            text = stringResource(R.string.settings_trusted_sites_desc),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                        if (trustedSites.isEmpty()) {
+                            Text(
+                                text = stringResource(R.string.settings_trusted_empty),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        } else {
+                            trustedSites.forEach { site ->
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                ) {
+                                    Icon(
+                                        Icons.Filled.Lock,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(18.dp),
+                                        tint = MaterialTheme.colorScheme.primary,
+                                    )
+                                    Spacer(Modifier.width(10.dp))
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Text(
+                                            text = if (site.port > 0 && site.port != 443) {
+                                                "${site.host}:${site.port}"
+                                            } else {
+                                                site.host
+                                            },
+                                            style = MaterialTheme.typography.bodyMedium,
+                                        )
+                                        Text(
+                                            text = TrustPolicy.formatFingerprint(site.fingerprintSha256)
+                                                .take(23) + "…",
+                                            style = MaterialTheme.typography.labelSmall,
+                                            fontFamily = FontFamily.Monospace,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        )
+                                        if (site.addedAt > 0L) {
+                                            val date = runCatching {
+                                                SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
+                                                    .format(Date(site.addedAt))
+                                            }.getOrNull()
+                                            if (!date.isNullOrBlank()) {
+                                                Text(
+                                                    text = stringResource(
+                                                        R.string.settings_trusted_added,
+                                                        date,
+                                                    ),
+                                                    style = MaterialTheme.typography.labelSmall,
+                                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                                )
+                                            }
+                                        }
+                                    }
+                                    TextButton(
+                                        onClick = {
+                                            container.trust.revoke(site.host, site.port)
+                                            // The live WebView may still remember the old
+                                            // exception; rebuild it so the next load re-prompts.
+                                            container.notifyTrustChanged()
+                                        },
+                                    ) {
+                                        Text(stringResource(R.string.action_revoke))
+                                    }
+                                }
+                            }
+                        }
+
+                        HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
+
+                        Text(
+                            text = stringResource(R.string.settings_credentials),
+                            style = MaterialTheme.typography.titleSmall,
+                        )
+                        Text(
+                            text = stringResource(R.string.settings_credentials_desc),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                        if (!container.credentials.isPersistent) {
+                            Text(
+                                text = stringResource(R.string.settings_security_not_persistent),
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.error,
+                            )
+                        }
+                        if (credentials.isEmpty()) {
+                            Text(
+                                text = stringResource(R.string.settings_credentials_empty),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        } else {
+                            credentials.forEach { credential ->
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                ) {
+                                    Icon(
+                                        Icons.Filled.Language,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(18.dp),
+                                        tint = MaterialTheme.colorScheme.primary,
+                                    )
+                                    Spacer(Modifier.width(10.dp))
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Text(
+                                            text = credential.host,
+                                            style = MaterialTheme.typography.bodyMedium,
+                                        )
+                                        Text(
+                                            text = listOf(credential.username, credential.realm)
+                                                .filter { it.isNotBlank() }
+                                                .joinToString(" · "),
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        )
+                                    }
+                                    IconButton(onClick = { credentialToDelete = credential }) {
+                                        Icon(
+                                            Icons.Filled.Delete,
+                                            contentDescription = stringResource(R.string.action_remove),
+                                            tint = MaterialTheme.colorScheme.error,
+                                        )
+                                    }
+                                }
+                            }
+                        }
+
+                        HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
+
+                        Text(
+                            text = stringResource(R.string.settings_clear_data),
+                            style = MaterialTheme.typography.titleSmall,
+                        )
+                        Text(
+                            text = stringResource(R.string.settings_clear_data_desc),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                        TextButton(onClick = { confirmClear = true }) {
+                            Text(
+                                text = stringResource(R.string.settings_clear_data),
+                                color = MaterialTheme.colorScheme.error,
+                            )
+                        }
+                    }
+                }
+
+                item {
+                    SettingsCard(title = stringResource(R.string.settings_section_browser)) {
+                        Text(
+                            text = stringResource(R.string.settings_default_browser),
+                            style = MaterialTheme.typography.titleSmall,
+                        )
+                        Text(
+                            text = if (!roleSupported) {
+                                stringResource(R.string.settings_default_browser_unavailable)
+                            } else if (isDefaultBrowser) {
+                                stringResource(R.string.settings_default_browser_status_on)
+                            } else {
+                                stringResource(R.string.settings_default_browser_status_off)
+                            },
+                            style = MaterialTheme.typography.bodySmall,
+                            color = if (isDefaultBrowser) {
+                                MaterialTheme.colorScheme.primary
+                            } else {
+                                MaterialTheme.colorScheme.onSurfaceVariant
+                            },
+                        )
+                        Text(
+                            text = stringResource(R.string.settings_default_browser_desc),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                        if (roleSupported && !isDefaultBrowser) {
+                            TextButton(
+                                onClick = {
+                                    val intent = DefaultBrowser.requestIntent(context)
+                                    if (intent != null) {
+                                        runCatching { roleLauncher.launch(intent) }
+                                    }
+                                },
+                            ) {
+                                Text(stringResource(R.string.settings_set_default_browser))
+                            }
+                        }
+                    }
+                }
+
+                item {
+                    SettingsCard(title = stringResource(R.string.settings_section_about)) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Surface(
+                                shape = RoundedCornerShape(16.dp),
+                                color = MaterialTheme.colorScheme.primaryContainer,
+                            ) {
+                                Icon(
+                                    Icons.Filled.Public,
+                                    contentDescription = null,
+                                    modifier = Modifier
+                                        .padding(10.dp)
+                                        .size(24.dp),
+                                    tint = MaterialTheme.colorScheme.onPrimaryContainer,
+                                )
+                            }
+                            Spacer(Modifier.width(12.dp))
+                            Column {
+                                Text(
+                                    text = stringResource(R.string.app_name),
+                                    style = MaterialTheme.typography.titleSmall,
+                                )
+                                Text(
+                                    text = stringResource(R.string.settings_version, BuildConfig.VERSION_NAME),
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            }
+                        }
+                        Text(
+                            text = stringResource(R.string.settings_about_body),
+                            style = MaterialTheme.typography.bodySmall,
+                        )
+                        Text(
+                            text = stringResource(R.string.settings_privacy),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable {
+                                    runCatching {
+                                        context.startActivity(
+                                            Intent(Intent.ACTION_VIEW)
+                                                .setData(android.net.Uri.parse(SOURCE_URL))
+                                                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+                                        )
+                                    }
+                                }
+                                .padding(vertical = 10.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Icon(
+                                Icons.Filled.OpenInNew,
+                                contentDescription = null,
+                                modifier = Modifier.size(18.dp),
+                            )
+                            Spacer(Modifier.width(10.dp))
+                            Text(
+                                text = stringResource(R.string.settings_source),
+                                style = MaterialTheme.typography.bodyMedium,
+                            )
+                        }
+                        Text(
+                            text = stringResource(R.string.settings_license),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                }
+            }
+        }
+    }
+
+    credentialToDelete?.let { credential ->
+        AlertDialog(
+            onDismissRequest = { credentialToDelete = null },
+            title = { Text(stringResource(R.string.settings_credentials_remove_title)) },
+            text = {
+                Text(
+                    stringResource(
+                        R.string.settings_credentials_remove_message,
+                        credential.host,
+                    ),
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        container.credentials.delete(credential.id)
+                        credentials = container.credentials.all()
+                        credentialToDelete = null
+                    },
+                ) {
+                    Text(
+                        text = stringResource(R.string.action_delete),
+                        color = MaterialTheme.colorScheme.error,
+                    )
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { credentialToDelete = null }) {
+                    Text(stringResource(R.string.action_cancel))
+                }
+            },
+        )
+    }
+
+    if (confirmClear) {
+        AlertDialog(
+            onDismissRequest = { confirmClear = false },
+            title = { Text(stringResource(R.string.settings_clear_data_title)) },
+            text = { Text(stringResource(R.string.settings_clear_data_message)) },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        confirmClear = false
+                        clearBrowsingData(context)
+                    },
+                ) {
+                    Text(stringResource(R.string.action_clear))
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { confirmClear = false }) {
+                    Text(stringResource(R.string.action_cancel))
+                }
+            },
+        )
+    }
+}
+
+private const val SOURCE_URL = "https://github.com/oriyu90/half-browser"
+
+@Composable
+private fun SettingsCard(title: String, content: @Composable () -> Unit) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
+        ),
+    ) {
+        Column(
+            modifier = Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Text(
+                text = title,
+                style = MaterialTheme.typography.titleSmall,
+                color = MaterialTheme.colorScheme.primary,
+            )
+            content()
+        }
+    }
+}
+
+@Composable
+private fun SwitchRow(
+    title: String,
+    description: String,
+    checked: Boolean,
+    enabled: Boolean = true,
+    onCheckedChange: (Boolean) -> Unit,
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Column(modifier = Modifier.weight(1f)) {
+            Text(text = title, style = MaterialTheme.typography.bodyMedium)
+            Text(
+                text = description,
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        Switch(checked = checked, onCheckedChange = onCheckedChange, enabled = enabled)
+    }
+}
+
+@Composable
+private fun RadioRow(selected: Boolean, label: String, onClick: () -> Unit) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick)
+            .padding(vertical = 4.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        RadioButton(selected = selected, onClick = onClick)
+        Spacer(Modifier.width(8.dp))
+        Text(text = label, style = MaterialTheme.typography.bodyMedium)
+    }
+}
+
+@Composable
+private fun ScaleSlider(
+    label: String,
+    initial: Float,
+    min: Float,
+    max: Float,
+    onCommit: (Float) -> Unit,
+) {
+    var value by remember(initial) { mutableFloatStateOf(initial) }
+    val steps = ((max - min) / 0.1f).roundToInt() - 1
+    Column(modifier = Modifier.fillMaxWidth()) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                text = label,
+                style = MaterialTheme.typography.bodyMedium,
+                modifier = Modifier.weight(1f),
+            )
+            Text(
+                text = stringResource(
+                    R.string.settings_scale_value,
+                    (value * 100).roundToInt(),
+                ),
+                style = MaterialTheme.typography.labelLarge,
+                color = MaterialTheme.colorScheme.primary,
+            )
+        }
+        Slider(
+            value = value,
+            onValueChange = { value = it },
+            onValueChangeFinished = { onCommit(value) },
+            valueRange = min..max,
+            steps = steps.coerceAtLeast(0),
+        )
+    }
+}
+
+private fun clearBrowsingData(context: Context) {
+    runCatching {
+        CookieManager.getInstance().removeAllCookies(null)
+        CookieManager.getInstance().flush()
+    }
+    runCatching { WebStorage.getInstance().deleteAllData() }
+    runCatching {
+        val webView = WebView(context)
+        webView.clearCache(true)
+        webView.clearHistory()
+        webView.destroy()
+    }
+    android.widget.Toast.makeText(
+        context,
+        context.getString(R.string.toast_cleared),
+        android.widget.Toast.LENGTH_SHORT,
+    ).show()
 }

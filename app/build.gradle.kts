@@ -33,9 +33,9 @@ android {
       isMinifyEnabled = true
       isShrinkResources = true
       proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
-      if (System.getenv("STORE_PASSWORD") != null && System.getenv("KEY_PASSWORD") != null) {
-        signingConfig = signingConfigs.getByName("release")
-      }
+      // Always sign release builds. A missing keystore/password fails the build
+      // instead of silently producing an unsigned APK that could be shipped.
+      signingConfig = signingConfigs.getByName("release")
     }
     debug {
       applicationIdSuffix = ".debug"

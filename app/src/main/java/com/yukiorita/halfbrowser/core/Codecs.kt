@@ -57,6 +57,6 @@ object Codecs {
             ?: return emptyList()
         return list.items
             .filter { it.host.isNotBlank() && it.fingerprintSha256.isNotBlank() }
-            .distinctBy { it.host.lowercase() }
+            .distinctBy { it.host.lowercase() + ":" + it.port }
     }
 }

@@ -58,7 +58,16 @@ class MainActivity : ComponentActivity() {
                 container.requestOpen(bookmark.url, bookmark.id, fromExternalApp = false)
             }
             is DeepLinks.Link.Open -> {
-                container.requestOpen(link.url, link.bookmarkId, fromExternalApp = false)
+                // A bookmarkId only decorates the toolbar when it really belongs to
+                // this URL; otherwise an external app could spoof the bookmark name.
+                val bookmarkId = link.bookmarkId
+                    ?.let { id -> container.bookmarks.findById(id) }
+                    ?.takeIf { bookmark ->
+                        com.yukiorita.halfbrowser.core.UrlNormalizer.canonicalForCompare(bookmark.url) ==
+                            com.yukiorita.halfbrowser.core.UrlNormalizer.canonicalForCompare(link.url)
+                    }
+                    ?.id
+                container.requestOpen(link.url, bookmarkId, fromExternalApp = false)
             }
             null -> Unit // Not ours (for example an unrelated custom scheme).
         }

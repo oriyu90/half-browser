@@ -6,6 +6,7 @@ import android.util.Log
 import androidx.security.crypto.EncryptedSharedPreferences
 import androidx.security.crypto.MasterKey
 import com.yukiorita.halfbrowser.core.Codecs
+import com.yukiorita.halfbrowser.core.CredentialKey
 import com.yukiorita.halfbrowser.core.CredentialMeta
 import kotlinx.serialization.Serializable
 import java.util.concurrent.ConcurrentHashMap
@@ -16,6 +17,8 @@ data class StoredCredential(
     val realm: String,
     val username: String,
     val password: String,
+    val scheme: String = "https",
+    val port: Int = 443,
     val savedAt: Long = 0L,
 )
 
@@ -28,10 +31,14 @@ data class CredentialBundle(
 /**
  * Encrypted storage for HTTP authentication credentials.
  *
+ * Credentials are scoped to scheme + host + port + realm. This matters: a
+ * password saved for `https://host:443` must never be offered to
+ * `http://host:80`, where it would travel in clear text.
+ *
  * The blob is encrypted with an AES-256-GCM key held by the Android Keystore.
  * If the Keystore is unavailable (some enterprise/older devices), the store falls
- * back to process-memory only: credentials still work for the session but are
- * never written in clear text. It is excluded from cloud backup and device
+ * back to process memory only: credentials still work for the session but are
+ * never written in clear text. The file is excluded from cloud backup and device
  * transfer via the manifest backup rules.
  */
 class CredentialStore(context: Context) {
@@ -54,27 +61,40 @@ class CredentialStore(context: Context) {
 
     val isPersistent: Boolean get() = prefs != null
 
-    fun find(host: String, realm: String): StoredCredential? {
-        val key = keyOf(host, realm)
+    fun find(scheme: String, host: String, port: Int, realm: String): StoredCredential? {
+        if (scheme.lowercase() != "https") return null
+        val key = keyOf(scheme, host, port, realm)
         memory[key]?.let { return it }
         val loaded = readAll()[key] ?: return null
         memory[key] = loaded
         return loaded
     }
 
-    fun save(host: String, realm: String, username: String, password: String) {
-        val normalizedHost = host.lowercase().trim()
+    /** @return true only when the credential was actually written to encrypted storage. */
+    fun save(
+        scheme: String,
+        host: String,
+        port: Int,
+        realm: String,
+        username: String,
+        password: String,
+    ): Boolean {
+        if (scheme.lowercase() != "https") return false
         val entry = StoredCredential(
-            host = normalizedHost,
+            host = host.lowercase().trim(),
             realm = realm.trim(),
             username = username,
             password = password,
+            scheme = "https",
+            port = port,
             savedAt = System.currentTimeMillis(),
         )
+        val key = keyOf("https", entry.host, port, realm)
         val all = readAll().toMutableMap()
-        all[keyOf(normalizedHost, realm)] = entry
-        memory[keyOf(normalizedHost, realm)] = entry
-        writeAll(all)
+        all[key] = entry
+        val written = writeAll(all)
+        if (written) memory[key] = entry
+        return written
     }
 
     fun all(): List<CredentialMeta> =
@@ -82,7 +102,7 @@ class CredentialStore(context: Context) {
             .sortedBy { it.host }
             .map {
                 CredentialMeta(
-                    id = keyOf(it.host, it.realm),
+                    id = keyOf(it.scheme, it.host, it.port, it.realm),
                     host = it.host,
                     realm = it.realm,
                     username = it.username,
@@ -108,21 +128,21 @@ class CredentialStore(context: Context) {
         }.getOrDefault(emptyMap())
     }
 
-    private fun writeAll(entries: Map<String, StoredCredential>) {
-        val target = prefs ?: return
-        runCatching {
+    private fun writeAll(entries: Map<String, StoredCredential>): Boolean {
+        val target = prefs ?: return false
+        return runCatching {
             val raw = Codecs.json.encodeToString(
                 CredentialBundle.serializer(),
                 CredentialBundle(items = entries),
             )
-            target.edit().putString(KEY_CREDENTIALS, raw).apply()
+            target.edit().putString(KEY_CREDENTIALS, raw).commit()
         }.onFailure {
             Log.w(TAG, "Could not persist credentials")
-        }
+        }.getOrDefault(false)
     }
 
-    private fun keyOf(host: String, realm: String): String =
-        "${host.lowercase().trim()}|${realm.trim()}"
+    private fun keyOf(scheme: String, host: String, port: Int, realm: String): String =
+        CredentialKey.of(scheme, host, port, realm)
 
     private companion object {
         const val TAG = "HalfBrowserCredentials"

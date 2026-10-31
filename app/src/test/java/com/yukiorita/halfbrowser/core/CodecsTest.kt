@@ -75,7 +75,7 @@ class CodecsTest {
     @Test
     fun `trusted sites round trip`() {
         val sites = listOf(
-            TrustedSite("example.com", "ab".repeat(32), subject = "CN=example.com", issuer = "CN=example.com"),
+            TrustedSite("example.com", 443, "ab".repeat(32), subject = "CN=example.com", issuer = "CN=example.com"),
         )
         assertEquals(sites, Codecs.decodeTrustedSites(Codecs.encodeTrustedSites(sites)))
         assertTrue(Codecs.decodeTrustedSites("garbage").isEmpty())

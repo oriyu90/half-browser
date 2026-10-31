@@ -13,3 +13,12 @@
 -keepclasseswithmembers class com.yukiorita.halfbrowser.** {
     kotlinx.serialization.KSerializer serializer(...);
 }
+
+# Tink (used by androidx.security:security-crypto) references annotation-only
+# classes at compile time and loads primitives reflectively. Without these rules
+# R8 fails the release build or strips a primitive and breaks credential storage.
+-dontwarn com.google.errorprone.annotations.**
+-dontwarn javax.annotation.**
+-dontwarn javax.annotation.concurrent.**
+-keep class com.google.crypto.tink.** { *; }
+-dontwarn com.google.crypto.tink.**

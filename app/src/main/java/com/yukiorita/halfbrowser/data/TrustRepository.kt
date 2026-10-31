@@ -18,8 +18,10 @@ class TrustRepository(context: Context) {
 
     fun snapshot(): List<TrustedSite> = _sites.value
 
-    fun find(host: String): TrustedSite? =
-        snapshot().firstOrNull { it.host.equals(host, ignoreCase = true) }
+    fun find(host: String, port: Int = 0): TrustedSite? =
+        snapshot().firstOrNull {
+            it.host.equals(host, ignoreCase = true) && (it.port == 0 || port == 0 || it.port == port)
+        }
 
     /**
      * Pins a certificate for a host. A new certificate replaces the old pin only
@@ -28,6 +30,7 @@ class TrustRepository(context: Context) {
      */
     fun pin(
         host: String,
+        port: Int,
         fingerprintSha256: String,
         subject: String = "",
         issuer: String = "",
@@ -36,28 +39,39 @@ class TrustRepository(context: Context) {
         val now = System.currentTimeMillis()
         val site = TrustedSite(
             host = normalizedHost,
+            port = port,
             fingerprintSha256 = TrustPolicy.normalizeFingerprint(fingerprintSha256),
             subject = subject.take(300),
             issuer = issuer.take(300),
             addedAt = now,
             lastSeenAt = now,
         )
-        mutable { current -> current.filterNot { it.host == normalizedHost } + site }
+        mutable { current ->
+            current.filterNot { it.host == normalizedHost && it.port == port } + site
+        }
         return site
     }
 
-    fun markSeen(host: String) {
+    fun markSeen(host: String, port: Int = 0) {
         val normalizedHost = host.lowercase().trim()
         mutable { current ->
             current.map {
-                if (it.host == normalizedHost) it.copy(lastSeenAt = System.currentTimeMillis()) else it
+                if (it.host == normalizedHost && (port == 0 || it.port == 0 || it.port == port)) {
+                    it.copy(lastSeenAt = System.currentTimeMillis())
+                } else {
+                    it
+                }
             }
         }
     }
 
-    fun revoke(host: String) {
+    fun revoke(host: String, port: Int? = null) {
         val normalizedHost = host.lowercase().trim()
-        mutable { current -> current.filterNot { it.host == normalizedHost } }
+        mutable { current ->
+            current.filterNot {
+                it.host == normalizedHost && (port == null || it.port == port)
+            }
+        }
     }
 
     private fun mutable(transform: (List<TrustedSite>) -> List<TrustedSite>) {

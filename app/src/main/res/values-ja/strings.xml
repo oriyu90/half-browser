@@ -86,6 +86,8 @@
     <string name="toast_share_failed">このページを共有できませんでした。</string>
     <string name="toast_desktop_enabled">PC版サイトを要求しています</string>
     <string name="toast_desktop_disabled">モバイル版サイトを要求しています</string>
+    <string name="toast_download_started">ダウンロードを開始しました</string>
+    <string name="toast_download_failed">ダウンロードを開始できませんでした</string>
     <string name="toast_cleared">閲覧データを消去しました</string>
     <string name="toast_invalid_url">有効なアドレスを入力してください。</string>
     <string name="toast_no_url">共有できるアドレスがまだありません。</string>
@@ -102,6 +104,9 @@
     <string name="ssl_validity">有効期限</string>
     <string name="ssl_trust_once">今回だけ信頼</string>
     <string name="ssl_trust_always">このサイトを常に信頼</string>
+    <string name="ssl_changed_confirm_title">信頼済みの証明書を置き換えますか？</string>
+    <string name="ssl_changed_confirm_message">%1$s の証明書は以前に信頼したものと異なります。サーバーまたは証明書を自分で変更した場合のみ続行してください。</string>
+    <string name="ssl_changed_confirm_action">新しい証明書を信頼する</string>
     <string name="ssl_go_back">戻る</string>
     <string name="ssl_trusted_toast">%1$s の証明書を信頼しました</string>
     <string name="ssl_scope_note">信頼はこのホストとこの証明書にのみ保存されます。証明書が変わると再度確認します。</string>
@@ -128,6 +133,10 @@
     <string name="auth_saved">サインインを保存しました</string>
     <string name="auth_show_password">パスワードを表示</string>
     <string name="auth_hide_password">パスワードを隠す</string>
+    <string name="auth_insecure_http">このページはHTTPのため、パスワードが暗号化されずに送られます。ハーフブラウザは保存しません。</string>
+    <string name="toast_link_not_opened">このリンクは安全に開けないため中止しました。</string>
+    <string name="auth_save_failed">サインインを保存できませんでした。</string>
+    <string name="ssl_pin_unavailable">この証明書は記憶できません。今回の訪問のみ続行できます。</string>
     <string name="auth_not_persistent">この端末では安全な保存領域を利用できません。このサインインは保存されません。</string>
 
     <!-- Settings -->

@@ -23,7 +23,6 @@ object LocaleHelper {
     }
 
     private fun wrapWith(base: Context, locale: Locale): Context = runCatching {
-        Locale.setDefault(locale)
         val configuration = Configuration(base.resources.configuration)
         configuration.setLocale(locale)
         configuration.setLayoutDirection(locale)

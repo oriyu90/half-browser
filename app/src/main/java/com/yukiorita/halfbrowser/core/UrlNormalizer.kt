@@ -56,6 +56,22 @@ object UrlNormalizer {
         return searchUrl(trimmed, searchTemplate)
     }
 
+    /**
+     * Normalises a URL typed into the bookmark editor. Unlike [toNavigable], a
+     * non-URL string is rejected instead of being turned into a search query.
+     */
+    fun normalizeForBookmark(input: String): String? {
+        val trimmed = input.trim()
+        if (trimmed.isEmpty()) return null
+        if (trimmed.startsWith("http://", ignoreCase = true) ||
+            trimmed.startsWith("https://", ignoreCase = true)
+        ) {
+            return validateWebUrl(trimmed)
+        }
+        if (HOST_LIKE.matches(trimmed)) return validateWebUrl("https://$trimmed")
+        return null
+    }
+
     fun validateWebUrl(url: String): String? {
         val candidate = url.trim()
         if (candidate.isEmpty()) return null
