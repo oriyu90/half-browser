@@ -1,8 +1,10 @@
 package com.yukiorita.halfbrowser.ui.settings
 
+import android.Manifest
 import android.app.Activity
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.os.Build
 import android.webkit.CookieManager
 import android.webkit.WebStorage
@@ -10,6 +12,8 @@ import android.webkit.WebView
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.core.app.NotificationManagerCompat
+import androidx.core.content.ContextCompat
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
@@ -78,7 +82,11 @@ import com.yukiorita.halfbrowser.core.LanguageMode
 import com.yukiorita.halfbrowser.core.SearchEngine
 import com.yukiorita.halfbrowser.core.ThemeMode
 import com.yukiorita.halfbrowser.core.TrustPolicy
+import com.yukiorita.halfbrowser.core.BookmarkIcons
+import com.yukiorita.halfbrowser.core.SiteWatch
+import com.yukiorita.halfbrowser.core.WatchRules
 import com.yukiorita.halfbrowser.ui.components.DefaultBrowser
+import com.yukiorita.halfbrowser.work.WatchScheduler
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -96,6 +104,22 @@ fun SettingsScreen(
     var credentials by remember { mutableStateOf(container.credentials.all()) }
     var credentialToDelete by remember { mutableStateOf<CredentialMeta?>(null) }
     var confirmClear by remember { mutableStateOf(false) }
+    val bookmarks by container.bookmarks.items.collectAsStateWithLifecycle()
+    val watches by container.siteWatch.watches.collectAsStateWithLifecycle()
+    val watchSettings by container.siteWatch.settings.collectAsStateWithLifecycle()
+    var notificationsAllowed by remember {
+        mutableStateOf(
+            runCatching { NotificationManagerCompat.from(context).areNotificationsEnabled() }
+                .getOrDefault(false),
+        )
+    }
+    val notificationPermissionLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission(),
+    ) {
+        notificationsAllowed = runCatching {
+            NotificationManagerCompat.from(context).areNotificationsEnabled()
+        }.getOrDefault(false)
+    }
 
     val roleSupported = remember { DefaultBrowser.isSupported(context) }
     var isDefaultBrowser by remember { mutableStateOf(DefaultBrowser.isDefault(context)) }
@@ -109,11 +133,40 @@ fun SettingsScreen(
             if (event == Lifecycle.Event.ON_RESUME) {
                 isDefaultBrowser = DefaultBrowser.isDefault(context)
                 credentials = container.credentials.all()
+                notificationsAllowed = runCatching {
+                    NotificationManagerCompat.from(context).areNotificationsEnabled()
+                }.getOrDefault(false)
             }
         }
         lifecycleOwner.lifecycle.addObserver(observer)
         onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
     }
+
+    fun activeWatchCount(): Boolean {
+        val ids = container.bookmarks.snapshot().map { it.id }.toSet()
+        return container.siteWatch.snapshot().any { it.enabled && it.bookmarkId in ids }
+    }
+
+    fun syncWatchSchedule() {
+        WatchScheduler.sync(context, container.siteWatch.settingsSnapshot(), activeWatchCount())
+    }
+
+    fun toggleWatch(bookmarkId: String, enabled: Boolean) {
+        container.siteWatch.setEnabled(bookmarkId, enabled)
+        WatchScheduler.sync(context, container.siteWatch.settingsSnapshot(), activeWatchCount())
+        if (enabled) {
+            WatchScheduler.requestImmediate(context, container.siteWatch.settingsSnapshot())
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU && !notificationsAllowed) {
+                runCatching {
+                    notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+                }
+            }
+        }
+    }
+
+    fun formatCheckTime(timestamp: Long): String =
+        runCatching { SimpleDateFormat("MM-dd HH:mm", Locale.getDefault()).format(Date(timestamp)) }
+            .getOrDefault("")
 
     BackHandler(onBack = onBack)
 
@@ -293,6 +346,211 @@ fun SettingsScreen(
                                 onClick = {
                                     container.settings.update { it.copy(searchEngine = engine) }
                                 },
+                            )
+                        }
+                    }
+                }
+
+                item {
+                    SettingsCard(title = stringResource(R.string.settings_section_notifications)) {
+                        Text(
+                            text = stringResource(R.string.settings_notifications_desc),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                        SwitchRow(
+                            title = stringResource(R.string.settings_notifications_master),
+                            description = "",
+                            checked = watchSettings.enabled,
+                            onCheckedChange = { value ->
+                                container.siteWatch.updateSettings { it.copy(enabled = value) }
+                                syncWatchSchedule()
+                            },
+                        )
+                        Text(
+                            text = stringResource(R.string.settings_notifications_interval),
+                            style = MaterialTheme.typography.bodyMedium,
+                        )
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .horizontalScroll(rememberScrollState()),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        ) {
+                            WatchRules.INTERVALS.forEach { minutes ->
+                                FilterChip(
+                                    selected = watchSettings.intervalMinutes == minutes,
+                                    onClick = {
+                                        container.siteWatch.updateSettings {
+                                            it.copy(intervalMinutes = minutes)
+                                        }
+                                        syncWatchSchedule()
+                                    },
+                                    label = {
+                                        Text(
+                                            stringResource(
+                                                R.string.settings_notifications_interval_value,
+                                                minutes,
+                                            ),
+                                        )
+                                    },
+                                )
+                            }
+                        }
+                        SwitchRow(
+                            title = stringResource(R.string.settings_notifications_wifi),
+                            description = "",
+                            checked = watchSettings.wifiOnly,
+                            onCheckedChange = { value ->
+                                container.siteWatch.updateSettings { it.copy(wifiOnly = value) }
+                                syncWatchSchedule()
+                            },
+                        )
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = stringResource(R.string.settings_notifications_permission),
+                                    style = MaterialTheme.typography.bodyMedium,
+                                )
+                                Text(
+                                    text = stringResource(
+                                        if (notificationsAllowed) {
+                                            R.string.settings_notifications_permission_ok
+                                        } else {
+                                            R.string.settings_notifications_permission_denied
+                                        },
+                                    ),
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = if (notificationsAllowed) {
+                                        MaterialTheme.colorScheme.primary
+                                    } else {
+                                        MaterialTheme.colorScheme.error
+                                    },
+                                )
+                            }
+                            if (!notificationsAllowed) {
+                                TextButton(
+                                    onClick = {
+                                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                                            runCatching {
+                                                notificationPermissionLauncher.launch(
+                                                    Manifest.permission.POST_NOTIFICATIONS,
+                                                )
+                                            }
+                                        } else {
+                                            runCatching {
+                                                context.startActivity(
+                                                    Intent(
+                                                        android.provider.Settings.ACTION_APP_NOTIFICATION_SETTINGS,
+                                                    ).putExtra(
+                                                        android.provider.Settings.EXTRA_APP_PACKAGE,
+                                                        context.packageName,
+                                                    )
+                                                        .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+                                                )
+                                            }
+                                        }
+                                    },
+                                ) {
+                                    Text(stringResource(R.string.settings_notifications_request_permission))
+                                }
+                            }
+                        }
+
+                        HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
+
+                        Text(
+                            text = stringResource(R.string.settings_notifications_sites),
+                            style = MaterialTheme.typography.titleSmall,
+                        )
+                        if (bookmarks.isEmpty()) {
+                            Text(
+                                text = stringResource(R.string.settings_notifications_empty),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        } else {
+                            val anyEnabled = watches.any { it.enabled }
+                            if (!anyEnabled) {
+                                Text(
+                                    text = stringResource(R.string.settings_notifications_no_sites),
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            }
+                            bookmarks.forEach { bookmark ->
+                                val watch: SiteWatch? = watches.firstOrNull {
+                                    it.bookmarkId == bookmark.id
+                                }
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                ) {
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Text(
+                                            text = BookmarkIcons.normalizedTitleOrFallback(
+                                                bookmark.title,
+                                                bookmark.url,
+                                            ),
+                                            style = MaterialTheme.typography.bodyMedium,
+                                        )
+                                        Text(
+                                            text = if ((watch?.lastCheckedAt ?: 0L) > 0L) {
+                                                stringResource(
+                                                    R.string.settings_notifications_last,
+                                                    formatCheckTime(watch!!.lastCheckedAt),
+                                                )
+                                            } else {
+                                                stringResource(R.string.settings_notifications_never)
+                                            },
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        )
+                                        if (!watch?.lastError.isNullOrBlank()) {
+                                            Text(
+                                                text = stringResource(
+                                                    R.string.settings_notifications_error,
+                                                    watch!!.lastError,
+                                                ),
+                                                style = MaterialTheme.typography.labelSmall,
+                                                color = MaterialTheme.colorScheme.error,
+                                            )
+                                        }
+                                        if (watch?.enabled == true) {
+                                            TextButton(
+                                                onClick = {
+                                                    WatchScheduler.requestImmediate(
+                                                        context,
+                                                        container.siteWatch.settingsSnapshot(),
+                                                    )
+                                                },
+                                            ) {
+                                                Text(stringResource(R.string.settings_notifications_check_now))
+                                            }
+                                        }
+                                    }
+                                    Switch(
+                                        checked = watch?.enabled == true,
+                                        onCheckedChange = { enabled ->
+                                            toggleWatch(bookmark.id, enabled)
+                                        },
+                                    )
+                                }
+                            }
+                        }
+                        Text(
+                            text = stringResource(R.string.settings_notifications_cooldown),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                        if (watchSettings.lastRunAt > 0L) {
+                            Text(
+                                text = stringResource(
+                                    R.string.settings_notifications_last_run,
+                                    formatCheckTime(watchSettings.lastRunAt),
+                                ),
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
                         }
                     }

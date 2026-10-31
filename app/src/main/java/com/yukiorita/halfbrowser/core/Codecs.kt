@@ -47,6 +47,33 @@ object Codecs {
             .distinctBy { it.id }
     }
 
+    fun encodeSiteWatches(items: List<SiteWatch>): String =
+        runCatching { json.encodeToString(SiteWatchList.serializer(), SiteWatchList(items = items)) }
+            .getOrDefault("")
+
+    fun decodeSiteWatches(raw: String?): List<SiteWatch> {
+        if (raw.isNullOrBlank()) return emptyList()
+        val list = runCatching { json.decodeFromString(SiteWatchList.serializer(), raw) }.getOrNull()
+            ?: return emptyList()
+        return list.items
+            .filter { it.bookmarkId.isNotBlank() }
+            .distinctBy { it.bookmarkId }
+    }
+
+    fun encodeWatchSettings(settings: SiteWatchSettings): String =
+        runCatching { json.encodeToString(SiteWatchSettings.serializer(), settings) }
+            .getOrDefault("")
+
+    fun decodeWatchSettings(raw: String?): SiteWatchSettings {
+        val decoded = raw?.takeIf { it.isNotBlank() }?.let {
+            runCatching { json.decodeFromString(SiteWatchSettings.serializer(), it) }.getOrNull()
+        } ?: SiteWatchSettings()
+        return decoded.copy(
+            intervalMinutes = WatchRules.normalizeInterval(decoded.intervalMinutes),
+            lastRunResult = decoded.lastRunResult.take(300),
+        )
+    }
+
     fun encodeTrustedSites(items: List<TrustedSite>): String =
         runCatching { json.encodeToString(TrustedSiteList.serializer(), TrustedSiteList(items = items)) }
             .getOrDefault("")

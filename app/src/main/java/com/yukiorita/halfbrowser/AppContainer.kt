@@ -5,6 +5,8 @@ import com.yukiorita.halfbrowser.core.NavigationRequest
 import com.yukiorita.halfbrowser.data.BookmarkRepository
 import com.yukiorita.halfbrowser.data.CredentialStore
 import com.yukiorita.halfbrowser.data.SettingsRepository
+import com.yukiorita.halfbrowser.data.SiteFetcher
+import com.yukiorita.halfbrowser.data.SiteWatchRepository
 import com.yukiorita.halfbrowser.data.TrustRepository
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.Flow
@@ -27,6 +29,8 @@ class AppContainer(context: Context) {
     val settings: SettingsRepository by lazy { SettingsRepository(appContext) }
     val trust: TrustRepository by lazy { TrustRepository(appContext) }
     val credentials: CredentialStore by lazy { CredentialStore(appContext) }
+    val siteWatch: SiteWatchRepository by lazy { SiteWatchRepository(appContext) }
+    val siteFetcher: SiteFetcher by lazy { SiteFetcher(trust, credentials) }
 
     private val _trustRevision = MutableStateFlow(0)
     /** Incremented when the user trusts/revokes a certificate in settings. */

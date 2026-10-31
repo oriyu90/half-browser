@@ -12,8 +12,8 @@ android {
     applicationId = "com.yukiorita.halfbrowser"
     minSdk = 26
     targetSdk = 36
-    versionCode = 2
-    versionName = "1.0.1"
+    versionCode = 3
+    versionName = "1.1.0"
     resourceConfigurations += listOf("en", "ja")
   }
 
@@ -74,6 +74,7 @@ dependencies {
   implementation(libs.androidx.navigation.compose)
   implementation(libs.androidx.security.crypto)
   implementation(libs.androidx.webkit)
+  implementation(libs.androidx.work.runtime.ktx)
   implementation(libs.kotlinx.serialization.json)
   implementation(libs.kotlinx.coroutines.android)
 

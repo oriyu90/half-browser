@@ -2,6 +2,10 @@ package com.yukiorita.halfbrowser.ui.browser
 
 import android.net.Uri
 import android.net.http.SslCertificate
+import android.webkit.GeolocationPermissions
+import android.webkit.PermissionRequest
+import android.webkit.ValueCallback
+import android.webkit.WebChromeClient
 import android.net.http.SslError
 import android.os.Build
 import android.webkit.WebView
@@ -31,6 +35,12 @@ class BrowserState {
 
     /** URL whose sign-in dialog was cancelled; keeps the error pane visible. */
     var pendingAuthErrorUrl by mutableStateOf<String?>(null)
+
+    var fileChooser by mutableStateOf<FileChooserRequest?>(null)
+    var webPermission by mutableStateOf<WebPermissionRequest?>(null)
+    var geoPermission by mutableStateOf<GeoPermissionRequest?>(null)
+    var fullscreenView by mutableStateOf<android.view.View?>(null)
+    var fullscreenCallback by mutableStateOf<WebChromeClient.CustomViewCallback?>(null)
     var desktopMode by mutableStateOf(false)
     var defaultUserAgent by mutableStateOf("")
 
@@ -39,6 +49,42 @@ class BrowserState {
 }
 
 enum class ErrorKind { NETWORK, AUTH, CERT }
+
+class FileChooserRequest(
+    val params: WebChromeClient.FileChooserParams,
+    private val callback: ValueCallback<Array<Uri>>,
+) {
+    private var settled = false
+
+    fun deliver(uris: Array<Uri>?) {
+        if (settled) return
+        settled = true
+        runCatching { callback.onReceiveValue(uris) }
+    }
+}
+
+class WebPermissionRequest(
+    val origin: String,
+    val resources: Array<String>,
+    private val request: PermissionRequest,
+) {
+    fun grant() = runCatching { request.grant(resources) }
+
+    fun deny() = runCatching { request.deny() }
+
+    val wantsCamera: Boolean
+        get() = resources.contains(PermissionRequest.RESOURCE_VIDEO_CAPTURE)
+
+    val wantsMicrophone: Boolean
+        get() = resources.contains(PermissionRequest.RESOURCE_AUDIO_CAPTURE)
+}
+
+class GeoPermissionRequest(
+    val origin: String,
+    private val callback: GeolocationPermissions.Callback,
+) {
+    fun resolve(allow: Boolean) = runCatching { callback.invoke(origin, allow, false) }
+}
 
 data class BrowserError(
     val description: String?,

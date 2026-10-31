@@ -195,6 +195,54 @@
     <string name="settings_license">MITライセンス</string>
     <string name="settings_privacy">解析・追跡・アカウントはありません。</string>
 
+    <!-- File chooser / web permissions -->
+    <string name="file_chooser_title">ファイルを追加</string>
+    <string name="file_chooser_file">ファイルを選択</string>
+    <string name="file_chooser_camera">カメラで撮影</string>
+    <string name="file_chooser_unavailable">この種類のファイルを開けるアプリがありません。</string>
+    <string name="web_permission_title">権限の確認</string>
+    <string name="web_permission_camera">このサイトがカメラを使おうとしています。</string>
+    <string name="web_permission_microphone">このサイトがマイクを使おうとしています。</string>
+    <string name="web_permission_both">このサイトがカメラとマイクを使おうとしています。</string>
+    <string name="web_permission_origin">サイト: %1$s</string>
+    <string name="web_permission_allow">許可</string>
+    <string name="web_permission_deny">拒否</string>
+    <string name="web_permission_android_denied">Androidが権限を拒否しました。システム設定から変更できます。</string>
+    <string name="geo_permission_title">位置情報を共有しますか？</string>
+    <string name="geo_permission_message">%1$s が位置情報を求めています。許可は今回の閲覧のみ有効です。</string>
+    <string name="geo_permission_allow">許可</string>
+    <string name="geo_permission_deny">拒否</string>
+    <string name="fullscreen_exit">全画面を終了</string>
+
+    <!-- Site notifications -->
+    <string name="notification_channel_name">サイトの更新</string>
+    <string name="notification_channel_desc">ブックマークしたページが更新されたときに通知します。</string>
+    <string name="notification_site_updated">%1$s が更新されました</string>
+    <string name="settings_section_notifications">サイト通知</string>
+    <string name="settings_notifications_desc">ブックマークしたページをバックグラウンドで確認し、内容が変わったら通知します。Webサイトからのプッシュ通知は Android WebView では受信できません。</string>
+    <string name="settings_notifications_master">バックグラウンド確認</string>
+    <string name="settings_notifications_interval">確認間隔</string>
+    <string name="settings_notifications_interval_value">%1$d 分</string>
+    <string name="settings_notifications_wifi">Wi-Fi のみ</string>
+    <string name="settings_notifications_permission">通知の権限</string>
+    <string name="settings_notifications_permission_ok">許可済み</string>
+    <string name="settings_notifications_permission_denied">未許可</string>
+    <string name="settings_notifications_request_permission">通知を許可</string>
+    <string name="settings_notifications_sites">監視中のページ</string>
+    <string name="settings_notifications_empty">ブックマークがありません。先にブックマークを追加してください。</string>
+    <string name="settings_notifications_no_sites">監視中のページはありません。</string>
+    <string name="settings_notifications_last">最終確認: %1$s</string>
+    <string name="settings_notifications_never">未確認</string>
+    <string name="settings_notifications_error">エラー: %1$s</string>
+    <string name="settings_notifications_check_now">今すぐ確認</string>
+    <string name="settings_notifications_cooldown">最短間隔は15分です。省電力のため Android が確認を遅らせる場合があります。初回は基準の保存のみで通知しません。</string>
+    <string name="settings_notifications_last_run">最終バックグラウンド実行: %1$s</string>
+    <string name="bookmark_notify_on">通知をオンにする</string>
+    <string name="bookmark_notify_off">通知をオフにする</string>
+    <string name="bookmark_notify_enabled">%1$s の通知を有効にしました</string>
+    <string name="bookmark_notify_disabled">%1$s の通知を無効にしました</string>
+    <string name="notification_permission_denied_toast">サイトの更新通知を受け取るには、Android の設定で通知を許可してください。</string>
+
     <!-- Accessibility -->
     <string name="cd_home">ホーム</string>
     <string name="cd_settings">設定</string>

@@ -101,6 +101,14 @@ v1.0.1 で修正した。詳細と証跡は [DEVICE-QA-SOV40.md](DEVICE-QA-SOV40
 | B-20 | 認証キャンセルで生の 401 が表示される | AUTH 用エラーペイン + Retry、401/407 を捕捉 |
 | B-21 | キーボード表示中の外側タップで入力が消える | 各ダイアログを `dismissOnClickOutside=false` に |
 
+## 4.2 v1.1.0 実装中に発見した不具合
+
+| ID | 症状 | 原因 | 修正 |
+|---|---|---|---|
+| B-22 | release が起動直後にクラッシュ（`NoSuchMethodException: WorkDatabase_Impl.<init>`） | R8 が Room の生成 DB と Worker のコンストラクタを削除 | Room/WorkManager/Worker の keep ルールを追加。debug だけでなく release の起動確認を必須化 |
+| B-23 | 「カメラで撮影」を押しても起動しない | FileProvider の authority が文字列補間されず `${context.packageName}.fileprovider` のままだった | `"${context.packageName}.fileprovider"` に修正 |
+| B-24 | ACTION_IMAGE_CAPTURE が `SecurityException`（CAMERA 宣言済み・未許可） | CAMERA を Manifest に追加したため、撮影インテントに実行時許可が必要 | 撮影前に CAMERA を要求し、許可後に起動 |
+
 ## 5. 再発防止
 
 1. **実機でしか出ない不具合**（B-01, B-02, B-03, B-04）を優先して確認する。静的テスト・lint だけでは検出できない。

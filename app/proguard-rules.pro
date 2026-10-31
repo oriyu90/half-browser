@@ -22,3 +22,12 @@
 -dontwarn javax.annotation.concurrent.**
 -keep class com.google.crypto.tink.** { *; }
 -dontwarn com.google.crypto.tink.**
+
+# WorkManager initializes its Room database and Worker classes by reflection.
+# Without these rules R8 removes the generated no-arg constructors and the
+# release build crashes during Startup (NoSuchMethodException WorkDatabase_Impl).
+-keep class androidx.work.impl.WorkDatabase_Impl { *; }
+-keep class * extends androidx.room.RoomDatabase { <init>(); }
+-keepclassmembers class * extends androidx.room.RoomDatabase { <init>(); }
+-dontwarn androidx.room.**
+-keep class com.yukiorita.halfbrowser.work.SiteWatchWorker { <init>(...); }

@@ -97,6 +97,18 @@ class CredentialStore(context: Context) {
         return written
     }
 
+    /**
+     * Returns the first stored credential for a host+port, regardless of realm.
+     * Used by the background watcher, which learns the realm from the 401 and
+     * otherwise just needs "the" credential for that site.
+     */
+    fun findFirstForHost(host: String, port: Int): StoredCredential? {
+        val normalizedHost = host.lowercase().trim()
+        return readAll().values.firstOrNull {
+            it.host == normalizedHost && it.port == port
+        }
+    }
+
     fun all(): List<CredentialMeta> =
         readAll().values
             .sortedBy { it.host }

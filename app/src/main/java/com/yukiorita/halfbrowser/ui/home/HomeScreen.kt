@@ -35,6 +35,8 @@ import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.Notifications
+import androidx.compose.material.icons.filled.NotificationsOff
 import androidx.compose.material.icons.filled.OpenInNew
 import androidx.compose.material.icons.filled.Public
 import androidx.compose.material.icons.filled.Search
@@ -90,6 +92,7 @@ import com.yukiorita.halfbrowser.core.BookmarkIcons
 import com.yukiorita.halfbrowser.core.GridColumns
 import com.yukiorita.halfbrowser.core.UrlNormalizer
 import com.yukiorita.halfbrowser.shortcuts.BookmarkShortcuts
+import com.yukiorita.halfbrowser.work.WatchScheduler
 import com.yukiorita.halfbrowser.ui.components.BookmarkEditorDialog
 import com.yukiorita.halfbrowser.ui.components.DefaultBrowser
 import kotlinx.coroutines.launch
@@ -107,6 +110,7 @@ fun HomeScreen(
     val context = LocalContext.current
     val settings by container.settings.settings.collectAsStateWithLifecycle()
     val bookmarks by container.bookmarks.items.collectAsStateWithLifecycle()
+    val watches by container.siteWatch.watches.collectAsStateWithLifecycle()
     val scope = rememberCoroutineScope()
     val snackbarHostState = remember { SnackbarHostState() }
 
@@ -152,6 +156,26 @@ fun HomeScreen(
             query = ""
             onOpenRequest(target, null)
         }
+    }
+
+    fun syncWatchSchedule() {
+        val ids = container.bookmarks.snapshot().map { it.id }.toSet()
+        val active = container.siteWatch.snapshot().any { it.enabled && it.bookmarkId in ids }
+        WatchScheduler.sync(context, container.siteWatch.settingsSnapshot(), active)
+    }
+
+    fun toggleWatch(bookmark: Bookmark, enabled: Boolean) {
+        container.siteWatch.setEnabled(bookmark.id, enabled)
+        syncWatchSchedule()
+        if (enabled) {
+            WatchScheduler.requestImmediate(context, container.siteWatch.settingsSnapshot())
+        }
+        message(
+            context.getString(
+                if (enabled) R.string.bookmark_notify_enabled else R.string.bookmark_notify_disabled,
+                BookmarkIcons.normalizedTitleOrFallback(bookmark.title, bookmark.url),
+            ),
+        )
     }
 
     fun requestShortcut(bookmark: Bookmark) {
@@ -337,6 +361,22 @@ fun HomeScreen(
                             requestShortcut(bookmark)
                         },
                     )
+                    val watchEnabled = watches.firstOrNull { it.bookmarkId == bookmark.id }?.enabled == true
+                    MenuRow(
+                        icon = {
+                            Icon(
+                                if (watchEnabled) Icons.Filled.NotificationsOff else Icons.Filled.Notifications,
+                                contentDescription = null,
+                            )
+                        },
+                        label = stringResource(
+                            if (watchEnabled) R.string.bookmark_notify_off else R.string.bookmark_notify_on,
+                        ),
+                        onClick = {
+                            menuTarget = null
+                            toggleWatch(bookmark, !watchEnabled)
+                        },
+                    )
                     MenuRow(
                         icon = { Icon(Icons.Filled.Share, contentDescription = null) },
                         label = stringResource(R.string.home_menu_share),
@@ -386,6 +426,10 @@ fun HomeScreen(
                 TextButton(
                     onClick = {
                         container.bookmarks.delete(bookmark.id)
+                        container.siteWatch.prune(
+                            container.bookmarks.snapshot().map { it.id }.toSet(),
+                        )
+                        syncWatchSchedule()
                         deleteTarget = null
                         message(R.string.bookmark_deleted)
                     },

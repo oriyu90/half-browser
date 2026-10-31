@@ -94,3 +94,43 @@ adb shell dumpsys shortcut | grep -i halfbrowser
 - 主要要件は **すべて実装され、release APK で実測済み**。
 - 未検証項目は上表のとおり明示し、README と設計評価にも記載した。
 - **リリース判定: PASS_WITH_NOTES**。
+
+
+---
+
+## 5. v1.1.0 追加検証（2026-11-01）
+
+対象: `versionCode 3` / `versionName 1.1.0`（署名済み release、APK SHA-256 は Releases の SHA256SUMS.txt）
+環境: Android 14 エミュレータ（API 34 / WebView 113）
+
+| 項目 | 結果 | 証拠・備考 |
+|---|---|---|
+| ファイル添付（SAF） | **PASS** | `Choose image` → ダイアログ → ファイル選択 → Photo Picker で画像選択 → ページに `Choose File: 1000000037.png`。release でも確認 |
+| カメラ撮影による添付 | **PASS** | カメラ権限ダイアログ → カメラアプリ起動 → シャッター → 確認 → ページに `capture_….jpg` |
+| Web カメラ（getUserMedia） | **PASS** | origin 付き確認ダイアログ → 許可 → ページログ `camera: granted`、カメラ使用中インジケータ表示 |
+| マイク | **PARTIAL** | 同一の `PermissionRequest` 経路を実装。専用の録音テストは未実施 |
+| 位置情報 | **PARTIAL** | origin 付き確認 → Android の位置情報権限（正確/おおよそ）まで実測。エミュレータに位置フィックスが入らず `getCurrentPosition` の結果は未確認 |
+| 動画の全画面 | **PASS** | 全画面ボタンで没入モードのダイアログが開き、システムバーが隠れる。戻るで復帰 |
+| JS alert / confirm / prompt | **PASS** | 標準ダイアログを実測 |
+| ダウンロード | **PASS** | 「Download started」トースト、DownloadManager へ |
+| target=_blank | **PASS** | 同一タブで `/second` を表示（単一タブ設計） |
+| サイト通知: 初回ベースライン | **PASS** | 監視 ON → lastCheckedAt / fingerprint 保存、通知なし |
+| サイト通知: 変更検知と通知 | **PASS** | ページ内容変更 → `Check now` → `notified=1`、通知（タイトル=ブックマーク名） |
+| 通知タップ | **PASS** | 通知タップで該当ブックマークをブラウザで表示 |
+| バックグラウンド実行 | **PASS** | アプリを Home に送った状態で Worker が lastCheckedAt を更新（`top=launcher`） |
+| プロセス kill 後の実行 | **PASS** | `am kill` 後、Worker が起動して変更を検知し通知（`notified=1`） |
+| クールダウン | **PASS** | 30 分以内の再変更では通知せず、fingerprint のみ更新 |
+| 通知権限（API 33+） | **PASS** | 設定から許可、通知チャンネル `site_watch` |
+| 監視の ON/OFF・間隔・Wi-Fi のみ | **PASS** | 設定 UI で変更、WorkManager の制約に反映 |
+| release 起動（R8） | **PASS** | WorkManager/Room の keep ルール追加後、release が起動・DB 初期化・通知まで動作 |
+| バックグラウンド省電力 | **PASS（設計）** | WebView を起動しない Worker、15 分以上、電池残量低下時に実行しない、Wi-Fi のみ設定 |
+| バックグラウンド省メモリ | **PARTIAL** | 画面停止時に `pauseTimers()` / `freeMemory()` を追加。プロセスはページ保持のため PSS 100MB 超のことがある。Worker 自体は WebView を使わない |
+
+### 制約（重要）
+
+- Android WebView は `Notification: undefined` / `PushManager: false` のため、**サイト起点の Web Push は受信できません**。
+  v1.1 の「サイト通知」はブックマークページの**変化検知**です（ADR-0011）。
+- Cookie セッションや JS レンダリングに依存するページは変化を検出できない場合があります。
+- 最短間隔は 15 分。Doze 中は遅延します。
+- SOV40（Android 11）実機での v1.1.0 検証は未実施（端末ロックのため）。v1.0.1 の実機結果は
+  [DEVICE-QA-SOV40.md](DEVICE-QA-SOV40.md) を参照。

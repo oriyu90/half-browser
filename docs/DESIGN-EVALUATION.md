@@ -1,7 +1,7 @@
 # 設計評価（Design Evaluation）
 
 - 文書ID: HB-EVAL-001 / 版 1.0（2026-10-31）
-- 対象: Half-Browser v1.0.1（`com.yukiorita.halfbrowser`）
+- 対象: Half-Browser v1.1.0（`com.yukiorita.halfbrowser`）
 - 評価者: 実装担当（メイン）＋ 独立レビュー担当（別コンテキスト、[REVIEW_REPORT.md](REVIEW_REPORT.md)）
 - 位置づけ: 実装後の設計・セキュリティ・堅牢性・互換性・UX の自己評価。**未検証を PASS と書かない**。
 
@@ -133,9 +133,9 @@
 
 | 指標 | 値 |
 |---|---|
-| JVM 単体テスト | **57 件 / 失敗 0** |
+| JVM 単体テスト | **68 件 / 失敗 0**（v1.1 で SiteContent / WatchRules / 通知コーデックを追加） |
 | Lint | **Error 0** / Warning 63（依存更新・未使用文字列・KTX 推奨が大半） |
-| 署名付きリリース APK | 1,953,793 B（R8 + shrink） |
+| 署名付きリリース APK | 2,112,300 B（R8 + shrink） |
 | 署名 | v2、証明書 SHA-256 `36:15:3A:ED:…:0F:37` |
 | コールドスタート（エミュレータ） | 約 2.7 秒（`am start -W`） |
 | 実機クラッシュ | debug / release とも FATAL 0 件（QA 期間） |
@@ -156,6 +156,18 @@
 | RK-07 | 認証情報の端末 unlocked 前提 | 低 | 生体認証ロックは v2 候補。 |
 
 ---
+
+## 8.1 v1.1.0 の追加設計
+
+- **ブラウザ補完**: FileProvider + SAF + ACTION_IMAGE_CAPTURE、Web 権限（カメラ/マイク/位置情報）の
+  origin 表示付き確認、HTML5 全画面。権限は永続化せずセッション中のみ。
+- **サイト通知**: WorkManager の PeriodicWork（15/30/60/180 分、ネットワーク・電池制約）で
+  ブックマークを直列取得し、本文の SHA-256 変化を検知してローカル通知。
+  WebView を起動せず、1 サイト 512 KiB / 10 秒 / 最大 20 サイト。自己署名は host+port ピン、
+  Basic 認証は https のみ既存ストアから 1 回試行。
+- **制約**: WebView は Web Push / Notification API 非対応のため、サイト起点のプッシュではなく
+  ページ変化監視である（ADR-0011）。Cookie/JS 依存ページは検出できない場合がある。
+- **R8**: WorkManager の Room 生成クラスと Worker の keep ルールが必須（v1.1.0 で追加）。
 
 ## 9. 総合評価
 

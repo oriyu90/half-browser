@@ -7,12 +7,14 @@ import android.net.Uri
 import android.net.http.SslError
 import android.os.Build
 import android.webkit.ClientCertRequest
+import android.webkit.GeolocationPermissions
 import android.webkit.HttpAuthHandler
 import android.webkit.PermissionRequest
 import android.webkit.RenderProcessGoneDetail
 import android.webkit.SslErrorHandler
 import android.webkit.WebChromeClient
 import android.webkit.WebResourceError
+import android.webkit.ValueCallback
 import android.webkit.WebResourceRequest
 import android.webkit.WebView
 import android.webkit.WebViewClient
@@ -321,6 +323,7 @@ private fun sanitizeAuthLabel(value: String, maxLength: Int): String =
 internal class HalfBrowserChromeClient(
     private val state: BrowserState,
 ) : WebChromeClient() {
+
     override fun onProgressChanged(view: WebView?, newProgress: Int) {
         state.progress = newProgress.coerceIn(0, 100)
         if (newProgress >= 100) state.loading = false
@@ -330,9 +333,57 @@ internal class HalfBrowserChromeClient(
         if (!title.isNullOrBlank()) state.pageTitle = title
     }
 
+    override fun onShowFileChooser(
+        view: WebView?,
+        callback: ValueCallback<Array<Uri>>?,
+        fileChooserParams: FileChooserParams?,
+    ): Boolean {
+        if (fileChooserParams == null || callback == null) return false
+        // A new request supersedes a pending one: return null to the old callback.
+        state.fileChooser?.deliver(null)
+        state.fileChooser = FileChooserRequest(fileChooserParams, callback)
+        return true
+    }
+
     override fun onPermissionRequest(request: PermissionRequest?) {
-        // No camera/microphone/location access is granted to web content.
-        request?.deny()
+        if (request == null) return
+        val supported = request.resources.filter {
+            it == PermissionRequest.RESOURCE_VIDEO_CAPTURE ||
+                it == PermissionRequest.RESOURCE_AUDIO_CAPTURE
+        }
+        if (supported.isEmpty()) {
+            request.deny()
+            return
+        }
+        state.webPermission?.deny()
+        state.webPermission = WebPermissionRequest(
+            origin = request.origin?.toString().orEmpty(),
+            resources = supported.toTypedArray(),
+            request = request,
+        )
+    }
+
+    override fun onGeolocationPermissionsShowPrompt(
+        origin: String?,
+        callback: GeolocationPermissions.Callback?,
+    ) {
+        if (callback == null) return
+        state.geoPermission?.resolve(false)
+        state.geoPermission = GeoPermissionRequest(origin.orEmpty(), callback)
+    }
+
+    override fun onShowCustomView(view: android.view.View?, callback: CustomViewCallback?) {
+        if (view == null || callback == null) return
+        state.fullscreenCallback?.let { runCatching { it.onCustomViewHidden() } }
+        state.fullscreenView = view
+        state.fullscreenCallback = callback
+    }
+
+    override fun onHideCustomView() {
+        val callback = state.fullscreenCallback
+        state.fullscreenView = null
+        state.fullscreenCallback = null
+        runCatching { callback?.onCustomViewHidden() }
     }
 
     override fun onCreateWindow(

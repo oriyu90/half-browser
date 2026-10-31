@@ -195,6 +195,54 @@
     <string name="settings_license">MIT License</string>
     <string name="settings_privacy">No analytics, no tracking, no account.</string>
 
+    <!-- File chooser / web permissions -->
+    <string name="file_chooser_title">Add a file</string>
+    <string name="file_chooser_file">Choose file</string>
+    <string name="file_chooser_camera">Take photo</string>
+    <string name="file_chooser_unavailable">No app can handle this file type.</string>
+    <string name="web_permission_title">Permission request</string>
+    <string name="web_permission_camera">This site wants to use the camera.</string>
+    <string name="web_permission_microphone">This site wants to use the microphone.</string>
+    <string name="web_permission_both">This site wants to use the camera and microphone.</string>
+    <string name="web_permission_origin">Site: %1$s</string>
+    <string name="web_permission_allow">Allow</string>
+    <string name="web_permission_deny">Deny</string>
+    <string name="web_permission_android_denied">Android denied the permission. You can change it in system settings.</string>
+    <string name="geo_permission_title">Share your location?</string>
+    <string name="geo_permission_message">%1$s wants to know your location. Permission is granted for this visit only.</string>
+    <string name="geo_permission_allow">Allow</string>
+    <string name="geo_permission_deny">Don\'t allow</string>
+    <string name="fullscreen_exit">Exit full screen</string>
+
+    <!-- Site notifications -->
+    <string name="notification_channel_name">Site updates</string>
+    <string name="notification_channel_desc">Notifies you when a bookmarked page changes.</string>
+    <string name="notification_site_updated">%1$s was updated</string>
+    <string name="settings_section_notifications">Site notifications</string>
+    <string name="settings_notifications_desc">Half-Browser checks bookmarked pages in the background and notifies you when their content changes. Websites cannot push notifications through Android WebView.</string>
+    <string name="settings_notifications_master">Background checks</string>
+    <string name="settings_notifications_interval">Check interval</string>
+    <string name="settings_notifications_interval_value">%1$d min</string>
+    <string name="settings_notifications_wifi">Wi-Fi only</string>
+    <string name="settings_notifications_permission">Notification permission</string>
+    <string name="settings_notifications_permission_ok">Allowed</string>
+    <string name="settings_notifications_permission_denied">Not allowed</string>
+    <string name="settings_notifications_request_permission">Allow notifications</string>
+    <string name="settings_notifications_sites">Watched pages</string>
+    <string name="settings_notifications_empty">No bookmarks yet. Add a bookmark first.</string>
+    <string name="settings_notifications_no_sites">No pages are being watched.</string>
+    <string name="settings_notifications_last">Last checked: %1$s</string>
+    <string name="settings_notifications_never">Not checked yet</string>
+    <string name="settings_notifications_error">Error: %1$s</string>
+    <string name="settings_notifications_check_now">Check now</string>
+    <string name="settings_notifications_cooldown">The shortest interval is 15 minutes. Android may delay checks to save power. The first check only saves a baseline.</string>
+    <string name="settings_notifications_last_run">Last background run: %1$s</string>
+    <string name="bookmark_notify_on">Turn on notifications</string>
+    <string name="bookmark_notify_off">Turn off notifications</string>
+    <string name="bookmark_notify_enabled">Notifications enabled for %1$s</string>
+    <string name="bookmark_notify_disabled">Notifications disabled for %1$s</string>
+    <string name="notification_permission_denied_toast">Allow notifications in Android settings to receive site updates.</string>
+
     <!-- Accessibility -->
     <string name="cd_home">Home</string>
     <string name="cd_settings">Settings</string>

@@ -1,20 +1,31 @@
 package com.yukiorita.halfbrowser.ui.browser
 
+import android.Manifest
+import android.app.Activity
 import android.app.DownloadManager
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.net.Uri
+import android.provider.MediaStore
+import android.util.Log
+import android.view.View
 import android.view.ViewGroup
+import android.view.WindowManager
+import android.widget.FrameLayout
 import android.os.Environment
 import android.webkit.CookieManager
+import android.webkit.WebChromeClient
 import android.webkit.DownloadListener
 import android.webkit.URLUtil
 import android.webkit.WebSettings
 import android.webkit.WebView
 import android.widget.Toast
 import androidx.activity.compose.BackHandler
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -72,12 +83,24 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.viewinterop.AndroidView
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
+import androidx.compose.ui.window.DialogWindowProvider
+import androidx.core.content.ContextCompat
+import androidx.core.content.FileProvider
+import androidx.core.view.WindowCompat
+import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.WindowInsetsControllerCompat
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.webkit.WebSettingsCompat
 import androidx.webkit.WebViewFeature
@@ -89,6 +112,7 @@ import com.yukiorita.halfbrowser.core.NavigationRequest
 import com.yukiorita.halfbrowser.core.UrlNormalizer
 import com.yukiorita.halfbrowser.ui.components.BookmarkEditorDialog
 import com.yukiorita.halfbrowser.ui.settings.SettingsScreen
+import java.io.File
 import kotlin.math.roundToInt
 
 /**
@@ -106,17 +130,186 @@ fun BrowserScreen(
     onOpenSettings: () -> Unit,
 ) {
     val context = LocalContext.current
+    val toast: (String) -> Unit = remember(context) {
+        { message -> Toast.makeText(context, message, Toast.LENGTH_SHORT).show() }
+    }
     val settings by container.settings.settings.collectAsStateWithLifecycle()
     val bookmarks by container.bookmarks.items.collectAsStateWithLifecycle()
     val state = remember { BrowserState() }
+    val lifecycleOwner = LocalLifecycleOwner.current
+
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            when (event) {
+                Lifecycle.Event.ON_STOP -> {
+                    // Do not burn CPU/GPU on a page nobody is looking at, and let
+                    // the WebView drop caches while the app is in the background.
+                    state.webView?.pauseTimers()
+                    @Suppress("DEPRECATION")
+                    state.webView?.freeMemory()
+                }
+                Lifecycle.Event.ON_START -> state.webView?.resumeTimers()
+                else -> Unit
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
     var menuOpen by remember { mutableStateOf(false) }
     var settingsOpen by rememberSaveable { mutableStateOf(false) }
     var editorTarget by remember { mutableStateOf<EditorTarget?>(null) }
     var confirmChangedCertificate by remember { mutableStateOf(false) }
+    var pendingFileRequest by remember { mutableStateOf<FileChooserRequest?>(null) }
+    var pendingCameraUri by remember { mutableStateOf<Uri?>(null) }
+    var pendingWebPermission by remember { mutableStateOf<WebPermissionRequest?>(null) }
+    var pendingGeoRequest by remember { mutableStateOf<GeoPermissionRequest?>(null) }
+    var pendingCameraRequest by remember { mutableStateOf<FileChooserRequest?>(null) }
 
-    val toast: (String) -> Unit = remember(context) {
-        { message -> Toast.makeText(context, message, Toast.LENGTH_SHORT).show() }
+    val filePickerLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.StartActivityForResult(),
+    ) { result ->
+        val request = pendingFileRequest ?: return@rememberLauncherForActivityResult
+        val cameraUri = pendingCameraUri
+        pendingFileRequest = null
+        pendingCameraUri = null
+        val uris: Array<Uri>? = if (result.resultCode == Activity.RESULT_OK) {
+            if (cameraUri != null) {
+                arrayOf(cameraUri)
+            } else {
+                WebChromeClient.FileChooserParams.parseResult(result.resultCode, result.data)
+            }
+        } else {
+            null
+        }
+        request.deliver(uris)
     }
+
+    val webPermissionLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestMultiplePermissions(),
+    ) { result ->
+        val request = pendingWebPermission ?: return@rememberLauncherForActivityResult
+        pendingWebPermission = null
+        if (result.values.all { it }) {
+            request.grant()
+        } else {
+            request.deny()
+            toast(context.getString(R.string.web_permission_android_denied))
+        }
+    }
+
+    fun newCameraUri(): Uri? = runCatching {
+        val directory = File(context.cacheDir, "camera").apply { mkdirs() }
+        val file = File.createTempFile("capture_", ".jpg", directory)
+        FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", file)
+    }.onFailure { Log.w("HalfBrowser", "camera uri failed", it) }.getOrNull()
+
+    fun startFilePicker(request: FileChooserRequest) {
+        state.fileChooser = null
+        pendingFileRequest = request
+        runCatching { filePickerLauncher.launch(request.params.createIntent()) }
+            .onFailure {
+                pendingFileRequest = null
+                request.deliver(null)
+                toast(context.getString(R.string.file_chooser_unavailable))
+            }
+    }
+
+    fun launchCameraIntent(request: FileChooserRequest) {
+        val uri = newCameraUri()
+        if (uri == null) {
+            state.fileChooser = null
+            request.deliver(null)
+            toast(context.getString(R.string.file_chooser_unavailable))
+            return
+        }
+        val intent = Intent(MediaStore.ACTION_IMAGE_CAPTURE).apply {
+            putExtra(MediaStore.EXTRA_OUTPUT, uri)
+            addFlags(Intent.FLAG_GRANT_WRITE_URI_PERMISSION or Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        }
+        state.fileChooser = null
+        pendingCameraUri = uri
+        pendingFileRequest = request
+        runCatching { filePickerLauncher.launch(intent) }
+            .onFailure {
+                Log.w("HalfBrowser", "camera intent failed", it)
+                pendingCameraUri = null
+                pendingFileRequest = null
+                request.deliver(null)
+                toast(context.getString(R.string.file_chooser_unavailable))
+            }
+    }
+
+    val cameraPermissionLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission(),
+    ) { granted ->
+        val request = pendingCameraRequest
+        pendingCameraRequest = null
+        if (granted && request != null) {
+            launchCameraIntent(request)
+        } else {
+            request?.deliver(null)
+            state.fileChooser = null
+            toast(context.getString(R.string.file_chooser_unavailable))
+        }
+    }
+
+    fun startCamera(request: FileChooserRequest) {
+        // Declaring CAMERA makes Android require the runtime grant before an
+        // ACTION_IMAGE_CAPTURE intent may be launched.
+        if (ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) ==
+            PackageManager.PERMISSION_GRANTED
+        ) {
+            launchCameraIntent(request)
+        } else {
+            pendingCameraRequest = request
+            cameraPermissionLauncher.launch(Manifest.permission.CAMERA)
+        }
+    }
+
+    val geoPermissionLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestMultiplePermissions(),
+    ) { result ->
+        val request = pendingGeoRequest ?: return@rememberLauncherForActivityResult
+        pendingGeoRequest = null
+        val granted = result[Manifest.permission.ACCESS_FINE_LOCATION] == true ||
+            result[Manifest.permission.ACCESS_COARSE_LOCATION] == true
+        request.resolve(granted)
+    }
+
+    fun requestAndroidWebPermissions(request: WebPermissionRequest) {
+        val needed = buildList {
+            if (request.wantsCamera) add(Manifest.permission.CAMERA)
+            if (request.wantsMicrophone) add(Manifest.permission.RECORD_AUDIO)
+        }.filter {
+            ContextCompat.checkSelfPermission(context, it) != PackageManager.PERMISSION_GRANTED
+        }
+        if (needed.isEmpty()) {
+            request.grant()
+        } else {
+            pendingWebPermission = request
+            webPermissionLauncher.launch(needed.toTypedArray())
+        }
+    }
+
+    fun requestLocationPermission(request: GeoPermissionRequest) {
+        val granted = ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) ==
+            PackageManager.PERMISSION_GRANTED ||
+            ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_COARSE_LOCATION) ==
+            PackageManager.PERMISSION_GRANTED
+        if (granted) {
+            request.resolve(true)
+        } else {
+            pendingGeoRequest = request
+            geoPermissionLauncher.launch(
+                arrayOf(
+                    Manifest.permission.ACCESS_FINE_LOCATION,
+                    Manifest.permission.ACCESS_COARSE_LOCATION,
+                ),
+            )
+        }
+    }
+
+
 
     val trustRevision by container.trustRevision.collectAsStateWithLifecycle()
     var seenTrustRevision by remember { mutableStateOf(trustRevision) }
@@ -425,6 +618,138 @@ fun BrowserScreen(
                     Text(stringResource(R.string.action_cancel))
                 }
             },
+        )
+    }
+
+    state.fileChooser?.let { request ->
+        val acceptsImage = request.params.acceptTypes.isEmpty() ||
+            request.params.acceptTypes.any { it == "*/*" || it.startsWith("image/") }
+        val canUseCamera = request.params.mode != WebChromeClient.FileChooserParams.MODE_SAVE &&
+            acceptsImage
+        Dialog(
+            onDismissRequest = {
+                request.deliver(null)
+                state.fileChooser = null
+            },
+            properties = DialogProperties(dismissOnClickOutside = false),
+        ) {
+            Surface(
+                shape = MaterialTheme.shapes.large,
+                color = MaterialTheme.colorScheme.surfaceContainerHigh,
+            ) {
+                Column(
+                    modifier = Modifier.padding(24.dp),
+                    verticalArrangement = Arrangement.spacedBy(6.dp),
+                ) {
+                    Text(
+                        text = stringResource(R.string.file_chooser_title),
+                        style = MaterialTheme.typography.headlineSmall,
+                    )
+                    TextButton(
+                        onClick = { startFilePicker(request) },
+                        modifier = Modifier.fillMaxWidth(),
+                    ) { Text(stringResource(R.string.file_chooser_file)) }
+                    if (canUseCamera) {
+                        TextButton(
+                            onClick = { startCamera(request) },
+                            modifier = Modifier.fillMaxWidth(),
+                        ) { Text(stringResource(R.string.file_chooser_camera)) }
+                    }
+                    TextButton(
+                        onClick = {
+                            request.deliver(null)
+                            state.fileChooser = null
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                    ) { Text(stringResource(R.string.action_cancel)) }
+                }
+            }
+        }
+    }
+
+    state.webPermission?.let { request ->
+        val messageRes = when {
+            request.wantsCamera && request.wantsMicrophone -> R.string.web_permission_both
+            request.wantsCamera -> R.string.web_permission_camera
+            else -> R.string.web_permission_microphone
+        }
+        AlertDialog(
+            onDismissRequest = {
+                request.deny()
+                state.webPermission = null
+            },
+            properties = DialogProperties(dismissOnClickOutside = false),
+            title = { Text(stringResource(R.string.web_permission_title)) },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Text(stringResource(messageRes))
+                    if (request.origin.isNotBlank()) {
+                        Text(
+                            text = stringResource(R.string.web_permission_origin, request.origin),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        state.webPermission = null
+                        requestAndroidWebPermissions(request)
+                    },
+                ) { Text(stringResource(R.string.web_permission_allow)) }
+            },
+            dismissButton = {
+                TextButton(
+                    onClick = {
+                        state.webPermission = null
+                        request.deny()
+                    },
+                ) { Text(stringResource(R.string.web_permission_deny)) }
+            },
+        )
+    }
+
+    state.geoPermission?.let { request ->
+        AlertDialog(
+            onDismissRequest = {
+                request.resolve(false)
+                state.geoPermission = null
+            },
+            properties = DialogProperties(dismissOnClickOutside = false),
+            title = { Text(stringResource(R.string.geo_permission_title)) },
+            text = {
+                Text(
+                    stringResource(
+                        R.string.geo_permission_message,
+                        request.origin.ifBlank { "this site" },
+                    ),
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        state.geoPermission = null
+                        requestLocationPermission(request)
+                    },
+                ) { Text(stringResource(R.string.geo_permission_allow)) }
+            },
+            dismissButton = {
+                TextButton(
+                    onClick = {
+                        state.geoPermission = null
+                        request.resolve(false)
+                    },
+                ) { Text(stringResource(R.string.geo_permission_deny)) }
+            },
+        )
+    }
+
+    state.fullscreenView?.let { view ->
+        FullscreenVideoDialog(
+            view = view,
+            onClose = { exitFullscreen(state) },
         )
     }
 
@@ -802,3 +1127,57 @@ private fun enqueueDownload(
     manager.enqueue(request)
     true
 }.getOrDefault(false)
+
+private fun exitFullscreen(state: BrowserState) {
+    val callback = state.fullscreenCallback
+    state.fullscreenView = null
+    state.fullscreenCallback = null
+    runCatching { callback?.onCustomViewHidden() }
+}
+
+/**
+ * Hosts a WebChromeClient custom view (HTML5 video fullscreen). The View belongs
+ * to WebView, so it is detached from any old parent, attached here, and removed
+ * again when the dialog goes away.
+ */
+@Composable
+private fun FullscreenVideoDialog(view: View, onClose: () -> Unit) {
+    Dialog(
+        onDismissRequest = onClose,
+        properties = DialogProperties(
+            usePlatformDefaultWidth = false,
+            decorFitsSystemWindows = false,
+        ),
+    ) {
+        val window = (LocalView.current.parent as? DialogWindowProvider)?.window
+        DisposableEffect(Unit) {
+            val controller = window?.let { WindowCompat.getInsetsController(it, it.decorView) }
+            controller?.systemBarsBehavior =
+                WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+            controller?.hide(WindowInsetsCompat.Type.systemBars())
+            window?.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+            onDispose {
+                controller?.show(WindowInsetsCompat.Type.systemBars())
+                window?.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+                (view.parent as? ViewGroup)?.removeView(view)
+            }
+        }
+        BackHandler(onBack = onClose)
+        AndroidView(
+            modifier = Modifier.fillMaxSize(),
+            factory = { ctx ->
+                (view.parent as? ViewGroup)?.removeView(view)
+                FrameLayout(ctx).apply {
+                    setBackgroundColor(android.graphics.Color.BLACK)
+                    addView(
+                        view,
+                        FrameLayout.LayoutParams(
+                            ViewGroup.LayoutParams.MATCH_PARENT,
+                            ViewGroup.LayoutParams.MATCH_PARENT,
+                        ),
+                    )
+                }
+            },
+        )
+    }
+}

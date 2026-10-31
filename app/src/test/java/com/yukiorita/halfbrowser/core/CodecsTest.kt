@@ -73,6 +73,28 @@ class CodecsTest {
     }
 
     @Test
+    fun `site watches round trip and deduplicate`() {
+        val watches = listOf(
+            SiteWatch(bookmarkId = "a", enabled = true, lastCheckedAt = 5, fingerprint = "ff"),
+            SiteWatch(bookmarkId = "a", enabled = false),
+            SiteWatch(bookmarkId = "", enabled = true),
+        )
+        val decoded = Codecs.decodeSiteWatches(Codecs.encodeSiteWatches(watches))
+        assertEquals(1, decoded.size)
+        assertEquals("a", decoded.first().bookmarkId)
+        assertTrue(Codecs.decodeSiteWatches("garbage").isEmpty())
+    }
+
+    @Test
+    fun `watch settings sanitize the interval`() {
+        val raw = """{"enabled":true,"intervalMinutes":7,"wifiOnly":true}"""
+        val decoded = Codecs.decodeWatchSettings(raw)
+        assertEquals(30, decoded.intervalMinutes)
+        assertTrue(decoded.wifiOnly)
+        assertEquals(WatchRules.DEFAULT_INTERVAL, Codecs.decodeWatchSettings(null).intervalMinutes)
+    }
+
+    @Test
     fun `trusted sites round trip`() {
         val sites = listOf(
             TrustedSite("example.com", 443, "ab".repeat(32), subject = "CN=example.com", issuer = "CN=example.com"),
