@@ -11,3 +11,4 @@ keystore/*.jks
 tools/qa-server/*.pem
 .agent-state/
 shots/
+dist/
