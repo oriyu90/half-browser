@@ -1,7 +1,7 @@
 # 設計評価（Design Evaluation）
 
 - 文書ID: HB-EVAL-001 / 版 1.0（2026-10-31）
-- 対象: Half-Browser v1.0.0（`com.yukiorita.halfbrowser`）
+- 対象: Half-Browser v1.0.1（`com.yukiorita.halfbrowser`）
 - 評価者: 実装担当（メイン）＋ 独立レビュー担当（別コンテキスト、[REVIEW_REPORT.md](REVIEW_REPORT.md)）
 - 位置づけ: 実装後の設計・セキュリティ・堅牢性・互換性・UX の自己評価。**未検証を PASS と書かない**。
 
@@ -15,7 +15,7 @@
 | 単体テスト | JVM 57 件（URL 正規化、JSON コーデック、信頼判定、認証試行、グリッド、資格情報キー、日英パリティ ほか）。 |
 | Lint | `lintDebug` Error 0 / Warning 63（大半は依存更新・未使用文字列・KTX 推奨）。 |
 | リリースビルド | R8 + resource shrink、署名検証（apksigner v2、証明書 SHA-256 `36153aed…`）。 |
-| 実機 QA | Android 14（API 34, arm64）エミュレータ。自己署名 HTTPS + Basic 認証サーバーをホストで起動し、信頼・認証・失効・再起動を実測。 |
+| 実機 QA | Sony SOV40（Android 11 / API 30 / WebView 153）＋ Android 14（API 34, arm64）エミュレータ。自己署名 HTTPS + Basic 認証サーバーをホストで起動し、信頼・認証・失効・再起動を実測。 |
 | 敵対的確認 | `intent://`・`javascript:`・`file://`・`data:` の拒否、http での資格情報非送信、ピン変更時の再確認をコードと実機で確認。 |
 
 ---
@@ -135,7 +135,7 @@
 |---|---|
 | JVM 単体テスト | **57 件 / 失敗 0** |
 | Lint | **Error 0** / Warning 63（依存更新・未使用文字列・KTX 推奨が大半） |
-| 署名付きリリース APK | 1,953,141 B（R8 + shrink） |
+| 署名付きリリース APK | 1,953,793 B（R8 + shrink） |
 | 署名 | v2、証明書 SHA-256 `36:15:3A:ED:…:0F:37` |
 | コールドスタート（エミュレータ） | 約 2.7 秒（`am start -W`） |
 | 実機クラッシュ | debug / release とも FATAL 0 件（QA 期間） |
@@ -163,4 +163,6 @@
 - **要件充足**: 主要要件（自己署名 HTTPS の信頼、認証情報の保存・自動入力、テーマ、ホーム、外部リンク、ショートカット、適応、日英）を実装・実測。
 - **品質**: 単体テスト 57 件、lint 0 error、署名済みリリースで E2E 動作。独立レビューの HIGH 指摘は修正済み
   （残る MEDIUM/LOW は [REVIEW-RESPONSE.md](REVIEW-RESPONSE.md) に採否を記録）。
+- **実機固有の修正**: 失効の即時反映（`clearSslPreferences`）、読込前タイトル、認証キャンセル時の
+  401 表示、ダイアログ外タップによる入力消失を v1.0.1 で修正（[DEVICE-QA-SOV40.md](DEVICE-QA-SOV40.md)）。
 - **判定**: **リリース可（PASS_WITH_NOTES）**。ただし API 26–28 実機・ファイル選択・レンダラ強制終了は未検証として明記する。

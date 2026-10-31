@@ -1,8 +1,8 @@
 # 最終検証（Final Verification）
 
 - 文書ID: HB-FINAL-001（2026-10-31）
-- 対象: Half-Browser v1.0.0 / `versionCode 1`
-- APK: `app-release.apk`（1,953,141 B、署名 v2、証明書 SHA-256 `36:15:3A:ED:27:25:EF:E4:9D:A3:59:F8:F8:71:0E:A9:DE:6E:1D:3F:79:01:F3:53:3E:C9:F8:AF:A2:2A:0F:37`）
+- 対象: Half-Browser v1.0.1 / `versionCode 2`
+- APK: `app-release.apk`（1,953,793 B、署名 v2、証明書 SHA-256 `36:15:3A:ED:27:25:EF:E4:9D:A3:59:F8:F8:71:0E:A9:DE:6E:1D:3F:79:01:F3:53:3E:C9:F8:AF:A2:2A:0F:37`（APK の SHA-256 は Releases の `SHA256SUMS.txt`））
 - 実行環境: Android 14（API 34）arm64 エミュレータ、1080×2400 / 420dpi、自己署名 HTTPS + Basic 認証サーバー
 - 自動テスト: `:app:testDebugUnitTest` **57 件 / 失敗 0**、`:app:lintDebug` **Error 0**（Warning 63）
 
@@ -76,6 +76,18 @@ adb shell dumpsys shortcut | grep -i halfbrowser
 | 500 ブックマーク・巨大ページの性能 | NOT_TESTED |
 
 ---
+
+## 3.1 実機（SOV40 / Android 11 / API 30）
+
+署名済み v1.0.1 を Sony SOV40 にインストールし、エミュレータと同じ主要経路を実測した。
+詳細は [DEVICE-QA-SOV40.md](DEVICE-QA-SOV40.md)。
+
+- PASS: 自己署名 HTTPS の警告・詳細・常に信頼、Basic 認証の保存と再起動後の自動表示、
+  失効の即時再警告（v1.0.1）、ライト/ダーク、日英切替、UI 130%、横向き、ブックマーク、
+  ショートカット確認、外部リンク chooser、他のブラウザ chooser（自己除外）、認証/証明書キャンセル時のエラーペイン。
+- 実機で発見し v1.0.1 で修正: 失効が再起動まで効かない、URL がタイトルに出る、生 401 表示、
+  ダイアログ外タップで入力消失。
+- 未検証: 既定ブラウザの確定、ショートカットの最終配置、証明書差し替え、API 26–28 実機。
 
 ## 4. 判定
 

@@ -28,6 +28,9 @@ class BrowserState {
     var error by mutableStateOf<BrowserError?>(null)
     var ssl by mutableStateOf<SslChallenge?>(null)
     var auth by mutableStateOf<AuthChallenge?>(null)
+
+    /** URL whose sign-in dialog was cancelled; keeps the error pane visible. */
+    var pendingAuthErrorUrl by mutableStateOf<String?>(null)
     var desktopMode by mutableStateOf(false)
     var defaultUserAgent by mutableStateOf("")
 
@@ -35,9 +38,12 @@ class BrowserState {
     var generation by mutableIntStateOf(0)
 }
 
+enum class ErrorKind { NETWORK, AUTH, CERT }
+
 data class BrowserError(
     val description: String?,
     val failingUrl: String?,
+    val kind: ErrorKind = ErrorKind.NETWORK,
 )
 
 /**

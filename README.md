@@ -38,12 +38,15 @@ Android 向けの小さな Chromium ブラウザです。ふつうのブラウ�
 
 ## インストール
 
-1. [Releases](https://github.com/oriyu90/half-browser/releases/latest) から `half-browser-1.0.0.apk` をダウンロードします。
+1. [Releases](https://github.com/oriyu90/half-browser/releases/latest) から `half-browser-1.0.1.apk` をダウンロードします。
 2. 端末で「提供元不明のアプリ」を許可してインストールします。
 3. 外部リンクを受け取りたい場合は、Android の設定 → アプリ → 既定のアプリ → ブラウザ で
    Half-Browser を選びます（アプリ内の「既定のブラウザに設定」からも開けます）。
 
 - 対応: Android 8.0（API 26）以降。Android System WebView が更新されている必要があります。
+- 実機検証: Sony SOV40（Android 11 / API 30 / WebView 153）で自己署名 HTTPS・認証・失効・
+  ブックマーク・ショートカット・外部リンク・テーマ・言語・スケール・横向きを確認済み
+  （[docs/DEVICE-QA-SOV40.md](docs/DEVICE-QA-SOV40.md)）。
 - 署名証明書 SHA-256: `36:15:3A:ED:27:25:EF:E4:9D:A3:59:F8:F8:71:0E:A9:DE:6E:1D:3F:79:01:F3:53:3E:C9:F8:AF:A2:2A:0F:37`
 
 ## ビルド
@@ -115,6 +118,21 @@ adaptive layouts with UI/text scaling, and full Japanese/English UI.
 
 Requires Android 8.0 (API 26) or later. MIT licensed. No ads, analytics, or accounts.
 See [docs/PLAN.md](docs/PLAN.md) and the [ADRs](docs/ADR/) for design decisions.
+
+## 変更履歴
+
+### v1.0.1（2026-11-01）
+実機（SOV40 / Android 11）検証で見つかった問題を修正:
+
+- 証明書の信頼を失効しても、アプリを再起動するまで警告が出なかった問題を修正
+  （`WebView.clearSslPreferences()` により即時反映）。
+- ページ読込前のバータイトルが URL 全体になっていた問題を修正（host:port 表示）。
+- HTTP 認証をキャンセルしたときにサーバーの生 `401` が表示されていた問題を修正
+  （「サインインが必要です」+ Retry）。
+- キーボード表示中にダイアログ外をタップすると入力が消える問題を修正。
+
+### v1.0.0（2026-10-31）
+初回リリース。
 
 ## 作者
 

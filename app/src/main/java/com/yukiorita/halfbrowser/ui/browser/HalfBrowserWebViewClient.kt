@@ -48,7 +48,7 @@ internal class HalfBrowserWebViewClient(
     override fun onPageStarted(view: WebView?, url: String?, favicon: android.graphics.Bitmap?) {
         super.onPageStarted(view, url, favicon)
         state.loading = true
-        state.error = null
+        if (state.pendingAuthErrorUrl == null) state.error = null
         state.currentUrl = url.orEmpty()
         state.canGoBack = view?.canGoBack() == true
     }
@@ -59,7 +59,18 @@ internal class HalfBrowserWebViewClient(
         state.progress = 100
         state.currentUrl = url ?: state.currentUrl
         state.canGoBack = view?.canGoBack() == true
-        verifyLoadedCertificate(view, state.currentUrl)
+        val pendingAuth = state.pendingAuthErrorUrl
+        if (pendingAuth != null) {
+            state.pendingAuthErrorUrl = null
+            state.loading = false
+            state.error = BrowserError(
+                description = null,
+                failingUrl = state.currentUrl,
+                kind = ErrorKind.AUTH,
+            )
+        } else {
+            verifyLoadedCertificate(view, state.currentUrl)
+        }
     }
 
     override fun onPageCommitVisible(view: WebView?, url: String?) {
@@ -180,8 +191,30 @@ internal class HalfBrowserWebViewClient(
                 }
                 handler.proceed(username, password)
             },
-            onCancel = { handler.cancel() },
+            onCancel = {
+                state.pendingAuthErrorUrl = view?.url ?: state.currentUrl
+                handler.cancel()
+            },
         )
+    }
+
+    override fun onReceivedHttpError(
+        view: WebView?,
+        request: WebResourceRequest?,
+        errorResponse: android.webkit.WebResourceResponse?,
+    ) {
+        super.onReceivedHttpError(view, request, errorResponse)
+        if (request?.isForMainFrame != true) return
+        val status = errorResponse?.statusCode ?: return
+        if (status == 401 || status == 407) {
+            // The server's bare 401 body is not useful; show a retryable pane.
+            state.loading = false
+            state.error = BrowserError(
+                description = "HTTP $status",
+                failingUrl = request.url?.toString(),
+                kind = ErrorKind.AUTH,
+            )
+        }
     }
 
     override fun onReceivedError(
@@ -275,6 +308,7 @@ internal class HalfBrowserWebViewClient(
         state.error = BrowserError(
             description = "The certificate used for this page does not match the trusted one.",
             failingUrl = url,
+            kind = ErrorKind.CERT,
         )
         runCatching { view?.stopLoading() }
     }

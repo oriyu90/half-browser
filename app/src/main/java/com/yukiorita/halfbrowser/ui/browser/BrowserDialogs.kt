@@ -44,6 +44,7 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import com.yukiorita.halfbrowser.R
 import com.yukiorita.halfbrowser.core.TrustPolicy
 import java.text.SimpleDateFormat
@@ -65,7 +66,10 @@ fun SslInterstitialDialog(
 ) {
     var showDetails by rememberSaveable(challenge.host) { mutableStateOf(challenge.changed) }
 
-    Dialog(onDismissRequest = onCancel) {
+    Dialog(
+        onDismissRequest = onCancel,
+        properties = DialogProperties(dismissOnClickOutside = false),
+    ) {
         Surface(
             shape = MaterialTheme.shapes.large,
             color = MaterialTheme.colorScheme.surfaceContainerHigh,
@@ -206,6 +210,7 @@ fun AuthPromptDialog(
 
     AlertDialog(
         onDismissRequest = onCancel,
+        properties = DialogProperties(dismissOnClickOutside = false),
         title = { Text(stringResource(R.string.auth_title)) },
         text = {
             Column(

@@ -77,6 +77,9 @@
     <string name="browser_menu_close">ページを閉じる</string>
     <string name="browser_title_bookmark">ブックマーク</string>
     <string name="browser_page_title_fallback">新しいページ</string>
+    <string name="browser_error_auth_title">サインインが必要です</string>
+    <string name="browser_error_auth_body">このページはユーザー名とパスワードを要求しています。「再試行」からサインインしてください。</string>
+    <string name="browser_error_cert_body">証明書が信頼されていないため、ページを読み込んでいません。</string>
     <string name="browser_error_title">このページを読み込めませんでした</string>
     <string name="browser_error_body">接続を確認して、もう一度お試しください。</string>
     <string name="browser_loading">読み込み中</string>

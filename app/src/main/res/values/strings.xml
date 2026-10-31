@@ -77,6 +77,9 @@
     <string name="browser_menu_close">Close page</string>
     <string name="browser_title_bookmark">Bookmark</string>
     <string name="browser_page_title_fallback">New page</string>
+    <string name="browser_error_auth_title">Sign-in required</string>
+    <string name="browser_error_auth_body">This page needs a user name and password. Tap Retry to sign in.</string>
+    <string name="browser_error_cert_body">The certificate was not trusted, so the page was not loaded.</string>
     <string name="browser_error_title">This page could not be loaded</string>
     <string name="browser_error_body">Check the connection, then try again.</string>
     <string name="browser_loading">Loading</string>

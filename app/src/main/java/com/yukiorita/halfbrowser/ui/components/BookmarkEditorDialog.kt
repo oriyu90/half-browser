@@ -23,6 +23,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.DialogProperties
 import com.yukiorita.halfbrowser.R
 import com.yukiorita.halfbrowser.core.Bookmark
 import com.yukiorita.halfbrowser.core.UrlNormalizer
@@ -57,6 +58,7 @@ fun BookmarkEditorDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
+        properties = DialogProperties(dismissOnClickOutside = false),
         title = {
             Text(
                 stringResource(

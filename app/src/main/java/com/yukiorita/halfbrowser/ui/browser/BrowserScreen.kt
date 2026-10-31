@@ -125,6 +125,10 @@ fun BrowserScreen(
             seenTrustRevision = trustRevision
             state.lastRequestedUrl = state.currentUrl.ifBlank { request.url }
             state.error = null
+            // Chromium remembers allowed certificate exceptions per browser
+            // profile, so recreating the WebView alone is not enough: explicitly
+            // forget them, otherwise a revoked trust keeps loading silently.
+            state.webView?.let { webView -> runCatching { webView.clearSslPreferences() } }
             state.generation += 1
         }
     }
@@ -134,9 +138,16 @@ fun BrowserScreen(
         val current = UrlNormalizer.canonicalForCompare(state.currentUrl) ?: return@remember null
         bookmarks.firstOrNull { UrlNormalizer.canonicalForCompare(it.url) == current }
     }
+    // WebView reports the URL as the title for error pages; do not show that.
+    val urlLikeTitle = Regex("^[A-Za-z0-9.-]+(:\\d+)?/.*")
+    val visiblePageTitle = state.pageTitle.takeUnless {
+        it.startsWith("http://", true) ||
+            it.startsWith("https://", true) ||
+            urlLikeTitle.matches(it)
+    }.orEmpty()
     val title = activeBookmark?.title
         ?: matchedBookmark?.title
-        ?: state.pageTitle.ifBlank { request.url }
+        ?: visiblePageTitle.ifBlank { authorityOf(request.url) ?: request.url }
     val host = authorityOf(state.currentUrl) ?: authorityOf(request.url) ?: request.url
     val secure = state.currentUrl.startsWith("https://", ignoreCase = true)
     val darkTheme = when (settings.themeMode) {
@@ -335,7 +346,6 @@ fun BrowserScreen(
                             subject = challenge.subject,
                             issuer = challenge.issuer,
                         )
-                        container.notifyTrustChanged()
                         toast(context.getString(R.string.ssl_trusted_toast, challenge.host))
                     }
                     challenge.proceed()
@@ -347,7 +357,7 @@ fun BrowserScreen(
                 state.ssl = null
                 // Cancelling leaves the WebView on a blank page; show the standard
                 // error pane with a retry action instead of silent white.
-                state.error = BrowserError(null, challenge.host)
+                state.error = BrowserError(null, challenge.host, kind = ErrorKind.CERT)
             },
         )
     }
@@ -364,6 +374,13 @@ fun BrowserScreen(
             onCancel = {
                 challenge.cancel()
                 state.auth = null
+                // Do not leave the raw 401 response on screen; offer a retry.
+                state.pendingAuthErrorUrl = state.currentUrl.ifBlank { request.url }
+                state.error = BrowserError(
+                    description = null,
+                    failingUrl = state.currentUrl.ifBlank { request.url },
+                    kind = ErrorKind.AUTH,
+                )
             },
         )
     }
@@ -394,7 +411,6 @@ fun BrowserScreen(
                                 subject = challenge.subject,
                                 issuer = challenge.issuer,
                             )
-                            container.notifyTrustChanged()
                             challenge.proceed()
                             state.ssl = null
                             toast(context.getString(R.string.ssl_trusted_toast, challenge.host))
@@ -627,12 +643,24 @@ private fun BrowserErrorPane(error: BrowserError, onRetry: () -> Unit) {
             )
             Spacer(Modifier.height(16.dp))
             Text(
-                text = stringResource(R.string.browser_error_title),
+                text = stringResource(
+                    when (error.kind) {
+                        ErrorKind.AUTH -> R.string.browser_error_auth_title
+                        ErrorKind.CERT -> R.string.ssl_title
+                        ErrorKind.NETWORK -> R.string.browser_error_title
+                    },
+                ),
                 style = MaterialTheme.typography.titleMedium,
             )
             Spacer(Modifier.height(8.dp))
             Text(
-                text = stringResource(R.string.browser_error_body),
+                text = stringResource(
+                    when (error.kind) {
+                        ErrorKind.AUTH -> R.string.browser_error_auth_body
+                        ErrorKind.CERT -> R.string.browser_error_cert_body
+                        ErrorKind.NETWORK -> R.string.browser_error_body
+                    },
+                ),
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
