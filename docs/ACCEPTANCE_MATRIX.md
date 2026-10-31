@@ -1,5 +1,9 @@
 # Half-Browser 受け入れ条件マトリクス（ACCEPTANCE_MATRIX）
 
+> **2026-10-31 更新**: 本表は計画時点の受け入れ条件である。実装後の実測結果・証跡は
+> [FINAL-VERIFICATION.md](FINAL-VERIFICATION.md)、レビュー対応は [REVIEW-RESPONSE.md](REVIEW-RESPONSE.md) を正とする。
+
+
 - 文書ID: HB-AC-001 / 版 1.0（2026-10-31）
 - 作成: TO-PLAN（HB-PLAN-01）
 - 関連: [PLAN.md](PLAN.md) / [TECH-RESEARCH.md](TECH-RESEARCH.md) / [ADR/](ADR/)
