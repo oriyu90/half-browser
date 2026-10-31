@@ -1,0 +1,193 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">ハーフブラウザ</string>
+    <string name="app_tagline">信頼したページを、すぐ手元に</string>
+
+    <!-- Home -->
+    <string name="home_search_hint">検索またはアドレスを入力</string>
+    <string name="home_bookmarks">ブックマーク</string>
+    <string name="home_empty_title">ブックマークがありません</string>
+    <string name="home_empty_body">ページを開いてメニューの「ブックマークに追加」を選ぶと、ここにアプリのように並びます。</string>
+    <string name="home_add_bookmark">ブックマークを追加</string>
+    <string name="home_tip">タイルを長押しすると、編集やホーム画面へのショートカット追加ができます。</string>
+    <string name="home_more">その他</string>
+    <string name="home_open_bookmark">%1$s を開く</string>
+    <string name="home_menu_open">開く</string>
+    <string name="home_menu_edit">編集</string>
+    <string name="home_menu_delete">削除</string>
+    <string name="home_menu_shortcut">ホーム画面に追加</string>
+    <string name="home_menu_share">共有</string>
+    <string name="home_untitled">ブックマーク</string>
+    <string name="home_default_browser_set">ハーフブラウザを既定のブラウザに設定</string>
+
+    <!-- Bookmark editor -->
+    <string name="bookmark_new_title">新しいブックマーク</string>
+    <string name="bookmark_edit_title">ブックマークを編集</string>
+    <string name="bookmark_field_title">名前</string>
+    <string name="bookmark_field_url">URL</string>
+    <string name="bookmark_field_icon">アイコン</string>
+    <string name="bookmark_field_icon_hint">1〜2文字</string>
+    <string name="bookmark_field_icon_helper">ホームのグリッドとホーム画面のショートカットに表示されます。</string>
+    <string name="bookmark_invalid_url">有効な http:// または https:// のアドレスを入力してください。</string>
+    <string name="bookmark_title_optional">任意。空の場合はサイト名を使います。</string>
+    <string name="bookmark_saved">ブックマークを保存しました</string>
+    <string name="bookmark_deleted">ブックマークを削除しました</string>
+    <string name="bookmark_duplicate">このアドレスはすでにブックマークにあります。</string>
+    <string name="bookmark_delete_title">ブックマークを削除しますか？</string>
+    <string name="bookmark_delete_message">「%1$s」をこのアプリから削除します。ページ自体は影響を受けません。</string>
+    <string name="shortcut_added">ショートカットを要求しました。ホーム画面で確認してください。</string>
+    <string name="shortcut_unavailable">このランチャーはピン留めショートカットに対応していません。</string>
+    <string name="shortcut_failed">ショートカットを追加できませんでした。</string>
+
+    <!-- Common actions -->
+    <string name="action_open">開く</string>
+    <string name="action_cancel">キャンセル</string>
+    <string name="action_save">保存</string>
+    <string name="action_delete">削除</string>
+    <string name="action_done">完了</string>
+    <string name="action_close">閉じる</string>
+    <string name="action_back">戻る</string>
+    <string name="action_retry">再試行</string>
+    <string name="action_share">共有</string>
+    <string name="action_copy">コピー</string>
+    <string name="action_reload">再読み込み</string>
+    <string name="action_settings">設定</string>
+    <string name="action_clear">クリア</string>
+    <string name="action_revoke">失効</string>
+    <string name="action_remove">削除</string>
+    <string name="action_reset">リセット</string>
+    <string name="action_search">検索</string>
+    <string name="action_more">その他</string>
+    <string name="common_on">オン</string>
+    <string name="common_off">オフ</string>
+    <string name="common_unknown">不明</string>
+
+    <!-- Browser -->
+    <string name="browser_back_home">ホームに戻る</string>
+    <string name="browser_more">その他のオプション</string>
+    <string name="browser_security">接続情報</string>
+    <string name="browser_menu_add_bookmark">ブックマークに追加</string>
+    <string name="browser_menu_edit_bookmark">ブックマークを編集</string>
+    <string name="browser_menu_share">ページを共有</string>
+    <string name="browser_menu_copy_url">リンクをコピー</string>
+    <string name="browser_menu_reload">再読み込み</string>
+    <string name="browser_menu_desktop">PC版サイト</string>
+    <string name="browser_menu_external">他のブラウザで開く</string>
+    <string name="browser_menu_settings">設定</string>
+    <string name="browser_menu_close">ページを閉じる</string>
+    <string name="browser_title_bookmark">ブックマーク</string>
+    <string name="browser_page_title_fallback">新しいページ</string>
+    <string name="browser_error_title">このページを読み込めませんでした</string>
+    <string name="browser_error_body">接続を確認して、もう一度お試しください。</string>
+    <string name="browser_loading">読み込み中</string>
+    <string name="toast_link_copied">リンクをコピーしました</string>
+    <string name="toast_no_browser">他のブラウザがインストールされていません。</string>
+    <string name="toast_opened_external">他のブラウザで開きました。</string>
+    <string name="toast_share_failed">このページを共有できませんでした。</string>
+    <string name="toast_desktop_enabled">PC版サイトを要求しています</string>
+    <string name="toast_desktop_disabled">モバイル版サイトを要求しています</string>
+    <string name="toast_cleared">閲覧データを消去しました</string>
+    <string name="toast_invalid_url">有効なアドレスを入力してください。</string>
+    <string name="toast_no_url">共有できるアドレスがまだありません。</string>
+
+    <!-- Certificate interstitial -->
+    <string name="ssl_title">証明書が信頼されていません</string>
+    <string name="ssl_subtitle_unknown">このサーバーが名乗る通りの相手かどうかを確認できません。自己署名証明書を使うローカルHTTPSサーバーではよくあることです。</string>
+    <string name="ssl_subtitle_changed">このサイトを信頼した後で証明書が変わっています。自分でサーバーを変更した場合のみ続行してください。</string>
+    <string name="ssl_host">ホスト</string>
+    <string name="ssl_problem">問題</string>
+    <string name="ssl_subject">発行先</string>
+    <string name="ssl_issuer">発行元</string>
+    <string name="ssl_fingerprint">SHA-256フィンガープリント</string>
+    <string name="ssl_validity">有効期限</string>
+    <string name="ssl_trust_once">今回だけ信頼</string>
+    <string name="ssl_trust_always">このサイトを常に信頼</string>
+    <string name="ssl_go_back">戻る</string>
+    <string name="ssl_trusted_toast">%1$s の証明書を信頼しました</string>
+    <string name="ssl_scope_note">信頼はこのホストとこの証明書にのみ保存されます。証明書が変わると再度確認します。</string>
+    <string name="ssl_details_show">証明書の詳細を表示</string>
+    <string name="ssl_details_hide">証明書の詳細を隠す</string>
+    <string name="ssl_error_untrusted">この証明書は信頼された認証局が発行していません。</string>
+    <string name="ssl_error_expired">証明書の有効期限が切れています。</string>
+    <string name="ssl_error_not_yet_valid">証明書はまだ有効ではありません。</string>
+    <string name="ssl_error_hostname_mismatch">証明書がこのホスト名と一致しません。</string>
+    <string name="ssl_error_date_invalid">証明書の日付が不正です。</string>
+    <string name="ssl_error_unknown">証明書を検証できませんでした。</string>
+
+    <!-- HTTP authentication -->
+    <string name="auth_title">サインイン</string>
+    <string name="auth_subtitle">このページはユーザー名とパスワードを要求しています。</string>
+    <string name="auth_host">ホスト</string>
+    <string name="auth_realm">レルム</string>
+    <string name="auth_username">ユーザー名</string>
+    <string name="auth_password">パスワード</string>
+    <string name="auth_save">このサインインを保存</string>
+    <string name="auth_save_hint">この端末で暗号化し、バックアップから除外します。</string>
+    <string name="auth_sign_in">サインイン</string>
+    <string name="auth_failed">サインインに失敗しました。ユーザー名とパスワードを確認してください。</string>
+    <string name="auth_saved">サインインを保存しました</string>
+    <string name="auth_show_password">パスワードを表示</string>
+    <string name="auth_hide_password">パスワードを隠す</string>
+    <string name="auth_not_persistent">この端末では安全な保存領域を利用できません。このサインインは保存されません。</string>
+
+    <!-- Settings -->
+    <string name="settings_title">設定</string>
+    <string name="settings_section_appearance">外観</string>
+    <string name="settings_theme">テーマ</string>
+    <string name="settings_theme_system">システム</string>
+    <string name="settings_theme_light">ライト</string>
+    <string name="settings_theme_dark">ダーク</string>
+    <string name="settings_dynamic_color">壁紙の色を使う</string>
+    <string name="settings_dynamic_color_desc">Android 12以降。アプリの配色が置き換わることがあります。</string>
+    <string name="settings_language">言語</string>
+    <string name="settings_language_system">システム</string>
+    <string name="settings_language_ja">日本語</string>
+    <string name="settings_language_en">English</string>
+    <string name="settings_language_note">言語を反映するために画面を再起動します。</string>
+    <string name="settings_section_display">表示</string>
+    <string name="settings_ui_scale">インターフェースの拡大率</string>
+    <string name="settings_font_scale">文字の拡大率</string>
+    <string name="settings_scale_value">%1$d%%</string>
+    <string name="settings_scale_reset">拡大率をリセット</string>
+    <string name="settings_grid_columns">ブックマークの列数</string>
+    <string name="settings_grid_auto">自動</string>
+    <string name="settings_grid_n">%1$d</string>
+    <string name="settings_section_search">検索</string>
+    <string name="settings_search_engine">検索エンジン</string>
+    <string name="settings_section_security">セキュリティ</string>
+    <string name="settings_trusted_sites">信頼した証明書</string>
+    <string name="settings_trusted_sites_desc">信頼を選んだ自己署名証明書です。信頼は1つのホストと1つの証明書にのみ適用されます。</string>
+    <string name="settings_trusted_empty">信頼した証明書はまだありません。</string>
+    <string name="settings_trusted_added">%1$s を追加</string>
+    <string name="settings_credentials">保存したサインイン</string>
+    <string name="settings_credentials_desc">HTTP認証のユーザー名とパスワードです。Android Keystoreで暗号化しています。</string>
+    <string name="settings_credentials_empty">保存したサインインはありません。</string>
+    <string name="settings_credentials_remove_title">保存したサインインを削除しますか？</string>
+    <string name="settings_credentials_remove_message">%1$s の保存済みパスワードを削除します。</string>
+    <string name="settings_security_not_persistent">安全な保存領域を利用できないため、サインインはアプリ終了までのみ保持されます。</string>
+    <string name="settings_clear_data">閲覧データを消去</string>
+    <string name="settings_clear_data_desc">Cookie・キャッシュ・ローカルストレージ。ブックマーク・設定・保存したサインインは残ります。</string>
+    <string name="settings_clear_data_title">閲覧データを消去しますか？</string>
+    <string name="settings_clear_data_message">Cookie・キャッシュ・サイトのストレージを削除します。ブックマーク・設定・保存したサインインは残ります。</string>
+    <string name="settings_section_browser">ブラウザ</string>
+    <string name="settings_default_browser">既定のブラウザ</string>
+    <string name="settings_default_browser_desc">Androidではリンクを開くアプリを選べます。ハーフブラウザを既定にすると、他のアプリからリンクを受け取れます。</string>
+    <string name="settings_set_default_browser">既定のブラウザに設定</string>
+    <string name="settings_default_browser_status_on">ハーフブラウザは既定のブラウザです。</string>
+    <string name="settings_default_browser_status_off">ハーフブラウザは既定のブラウザではありません。</string>
+    <string name="settings_default_browser_unavailable">この端末はブラウザロールに対応していません。システム設定で既定のブラウザを選んでください。</string>
+    <string name="settings_section_about">このアプリについて</string>
+    <string name="settings_version">バージョン %1$s</string>
+    <string name="settings_about_body">ハーフブラウザは、信頼したページのための小さなChromiumブラウザ（Android WebView）です。自己署名証明書を使うローカルHTTPSサーバーにも対応します。</string>
+    <string name="settings_source">ソースコード</string>
+    <string name="settings_license">MITライセンス</string>
+    <string name="settings_privacy">解析・追跡・アカウントはありません。</string>
+
+    <!-- Accessibility -->
+    <string name="cd_home">ホーム</string>
+    <string name="cd_settings">設定</string>
+    <string name="cd_bookmark_icon">ブックマークのアイコン</string>
+    <string name="cd_clear_search">アドレスをクリア</string>
+    <string name="cd_back_home">ホームに戻る</string>
+    <string name="cd_more_options">その他のオプション</string>
+</resources>
