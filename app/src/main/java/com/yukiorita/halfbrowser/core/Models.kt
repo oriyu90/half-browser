@@ -56,12 +56,16 @@ enum class LanguageMode(val tag: String) {
     ENGLISH("en"),
 }
 
-enum class SearchEngine(val key: String, val template: String) {
-    GOOGLE("google", "https://www.google.com/search?q=%s"),
-    DUCKDUCKGO("duckduckgo", "https://duckduckgo.com/?q=%s"),
-    BING("bing", "https://www.bing.com/search?q=%s");
+enum class SearchEngine(val key: String, val template: String, val label: String) {
+    GOOGLE("google", "https://www.google.com/search?q=%s", "Google"),
+    DUCKDUCKGO("duckduckgo", "https://duckduckgo.com/?q=%s", "DuckDuckGo"),
+    BRAVE("brave", "https://search.brave.com/search?q=%s", "Brave Search"),
+    ECOSIA("ecosia", "https://www.ecosia.org/search?q=%s", "Ecosia"),
+    KAGI("kagi", "https://kagi.com/search?q=%s", "Kagi Search"),
+    MOJEEK("mojeek", "https://www.mojeek.com/search?q=%s", "Mojeek");
 
     companion object {
+        /** Unknown or retired keys (e.g. the removed "bing") fall back to DuckDuckGo. */
         fun fromKey(key: String?): SearchEngine =
             entries.firstOrNull { it.key == key } ?: DUCKDUCKGO
     }
@@ -83,6 +87,12 @@ data class AppSettings(
     val searchEngine: SearchEngine = SearchEngine.DUCKDUCKGO,
     /** Show the address field on the home screen. */
     val showAddressBar: Boolean = true,
+    /** Accent hue in degrees (0-360). 222 reproduces the original brand blue. */
+    val accentHue: Float = 222f,
+    /** Accent saturation, 0-1. */
+    val accentSaturation: Float = 0.86f,
+    /** Accent brightness/lightness bias, 0-1 (0.5 is neutral). */
+    val accentTone: Float = 0.5f,
 ) {
     companion object {
         val DEFAULT = AppSettings()
@@ -91,6 +101,11 @@ data class AppSettings(
         const val MAX_UI_SCALE = 1.4f
         const val MIN_FONT_SCALE = 0.8f
         const val MAX_FONT_SCALE = 1.5f
+        const val MIN_ACCENT_SATURATION = 0.15f
+        const val MAX_ACCENT_SATURATION = 1.0f
+        const val DEFAULT_ACCENT_HUE = 222f
+        const val DEFAULT_ACCENT_SATURATION = 0.86f
+        const val DEFAULT_ACCENT_TONE = 0.5f
         val ALLOWED_GRID_COLUMNS = setOf(0, 3, 4, 5, 6, 8)
     }
 }

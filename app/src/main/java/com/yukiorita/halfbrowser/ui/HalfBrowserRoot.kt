@@ -26,7 +26,13 @@ fun HalfBrowserRoot(container: AppContainer) {
     val settings by container.settings.settings.collectAsStateWithLifecycle()
     val openRequest by container.openRequest.collectAsStateWithLifecycle()
 
-    HalfBrowserTheme(themeMode = settings.themeMode, dynamicColor = settings.dynamicColor) {
+    HalfBrowserTheme(
+        themeMode = settings.themeMode,
+        dynamicColor = settings.dynamicColor,
+        accentHue = settings.accentHue,
+        accentSaturation = settings.accentSaturation,
+        accentTone = settings.accentTone,
+    ) {
         AppScale(uiScale = settings.uiScale, fontScale = settings.fontScale) {
             val nav = rememberNavController()
 

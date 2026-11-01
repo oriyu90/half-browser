@@ -4,6 +4,7 @@ import android.content.Context
 import com.yukiorita.halfbrowser.core.Codecs
 import com.yukiorita.halfbrowser.core.SiteWatch
 import com.yukiorita.halfbrowser.core.SiteWatchSettings
+import com.yukiorita.halfbrowser.core.WatchRules
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -100,6 +101,25 @@ class SiteWatchRepository(context: Context) {
     /** Removes watch records whose bookmark no longer exists. */
     fun prune(validBookmarkIds: Set<String>) {
         mutableWatches { current -> current.filter { it.bookmarkId in validBookmarkIds } }
+    }
+
+    /** Bulk replacement used by backup restore. */
+    fun replaceAll(watches: List<SiteWatch>, settings: SiteWatchSettings) {
+        synchronized(lock) {
+            val cleaned = watches.filter { it.bookmarkId.isNotBlank() }
+                .distinctBy { it.bookmarkId }
+                .take(500)
+            val updatedSettings = settings.copy(
+                intervalMinutes = WatchRules.normalizeInterval(settings.intervalMinutes),
+                lastRunResult = settings.lastRunResult.take(300),
+            )
+            prefs.edit()
+                .putString(KEY_WATCHES, Codecs.encodeSiteWatches(cleaned))
+                .putString(KEY_SETTINGS, Codecs.encodeWatchSettings(updatedSettings))
+                .apply()
+            _watches.value = cleaned
+            _settings.value = updatedSettings
+        }
     }
 
     fun updateSettings(transform: (SiteWatchSettings) -> SiteWatchSettings) {

@@ -6,27 +6,11 @@ import android.util.Log
 import androidx.security.crypto.EncryptedSharedPreferences
 import androidx.security.crypto.MasterKey
 import com.yukiorita.halfbrowser.core.Codecs
+import com.yukiorita.halfbrowser.core.CredentialBundle
 import com.yukiorita.halfbrowser.core.CredentialKey
 import com.yukiorita.halfbrowser.core.CredentialMeta
-import kotlinx.serialization.Serializable
+import com.yukiorita.halfbrowser.core.StoredCredential
 import java.util.concurrent.ConcurrentHashMap
-
-@Serializable
-data class StoredCredential(
-    val host: String,
-    val realm: String,
-    val username: String,
-    val password: String,
-    val scheme: String = "https",
-    val port: Int = 443,
-    val savedAt: Long = 0L,
-)
-
-@Serializable
-data class CredentialBundle(
-    val version: Int = 1,
-    val items: Map<String, StoredCredential> = emptyMap(),
-)
 
 /**
  * Encrypted storage for HTTP authentication credentials.
@@ -120,6 +104,26 @@ class CredentialStore(context: Context) {
                     username = it.username,
                 )
             }
+
+    /** Bulk export for backups. Callers must encrypt the result before writing it. */
+    fun exportAll(): Map<String, StoredCredential> = readAll()
+
+    /** Bulk import from a decrypted backup. Existing entries win unless [overwrite]. */
+    fun importAll(entries: Map<String, StoredCredential>, overwrite: Boolean = true): Int {
+        if (entries.isEmpty()) return 0
+        val all = readAll().toMutableMap()
+        var imported = 0
+        entries.forEach { (key, value) ->
+            if (!overwrite && all.containsKey(key)) return@forEach
+            all[key] = value
+            imported += 1
+        }
+        if (imported > 0 && writeAll(all)) {
+            memory.clear()
+            all.forEach { (key, value) -> memory[key] = value }
+        }
+        return imported
+    }
 
     fun delete(id: String) {
         memory.remove(id)

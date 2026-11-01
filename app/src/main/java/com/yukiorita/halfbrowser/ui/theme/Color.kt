@@ -2,8 +2,10 @@ package com.yukiorita.halfbrowser.ui.theme
 
 import androidx.compose.ui.graphics.Color
 
-// Brand palette: a deep "browser chrome" blue with a cyan accent. Values are
-// chosen so text on containers clears WCAG AA (>= 4.5:1) in both modes.
+// Brand palette: a deep "browser chrome" blue with a cyan accent. The primary
+// family is only a fallback now: the live palette comes from the user's accent
+// settings (see core/AccentMath.kt). Light surface values are kept neutral so a
+// custom accent never fights with the background.
 val LightPrimary = Color(0xFF0F4CD9)
 val LightOnPrimary = Color(0xFFFFFFFF)
 val LightPrimaryContainer = Color(0xFFDCE6FF)
@@ -34,35 +36,24 @@ val LightSurfaceContainer = Color(0xFFECF1F8)
 val LightSurfaceContainerHigh = Color(0xFFE6EBF3)
 val LightSurfaceContainerHighest = Color(0xFFDFE5EF)
 
-val DarkPrimary = Color(0xFFA8C8FF)
-val DarkOnPrimary = Color(0xFF002E6E)
-val DarkPrimaryContainer = Color(0xFF0B3E96)
-val DarkOnPrimaryContainer = Color(0xFFDCE6FF)
+// Dark mode is deliberately black-on-white: the background and both surface
+// levels sit on pure #000000, containers are near-black greys, and every text
+// role is pure white. This is a readability choice, not an aesthetic one: an
+// OLED panel shows true black, and white text on it clears WCAG AAA.
+val DarkBackground = Color(0xFF000000)
+val DarkOnBackground = Color(0xFFFFFFFF)
+val DarkSurface = Color(0xFF000000)
+val DarkOnSurface = Color(0xFFFFFFFF)
+val DarkSurfaceVariant = Color(0xFF1C1C1E)
+val DarkOnSurfaceVariant = Color(0xFFC7C7CC)
+val DarkOutline = Color(0xFF8E8E93)
+val DarkOutlineVariant = Color(0xFF38383A)
 
-val DarkSecondary = Color(0xFF7DD3E8)
-val DarkOnSecondary = Color(0xFF00363F)
-val DarkSecondaryContainer = Color(0xFF00505D)
-val DarkOnSecondaryContainer = Color(0xFFCFF5FF)
-
-val DarkTertiary = Color(0xFFCFB6FF)
-val DarkOnTertiary = Color(0xFF3B008F)
-val DarkTertiaryContainer = Color(0xFF5516C4)
-val DarkOnTertiaryContainer = Color(0xFFEBDDFF)
-
-val DarkBackground = Color(0xFF0B1220)
-val DarkOnBackground = Color(0xFFE6EDF7)
-val DarkSurface = Color(0xFF101A2B)
-val DarkOnSurface = Color(0xFFE6EDF7)
-val DarkSurfaceVariant = Color(0xFF26324A)
-val DarkOnSurfaceVariant = Color(0xFFB8C4D6)
-val DarkOutline = Color(0xFF8A95A8)
-val DarkOutlineVariant = Color(0xFF3A475E)
-
-val DarkSurfaceContainerLowest = Color(0xFF070D18)
-val DarkSurfaceContainerLow = Color(0xFF0E1626)
-val DarkSurfaceContainer = Color(0xFF131D2E)
-val DarkSurfaceContainerHigh = Color(0xFF1A2537)
-val DarkSurfaceContainerHighest = Color(0xFF213047)
+val DarkSurfaceContainerLowest = Color(0xFF000000)
+val DarkSurfaceContainerLow = Color(0xFF0C0C0D)
+val DarkSurfaceContainer = Color(0xFF141415)
+val DarkSurfaceContainerHigh = Color(0xFF1C1C1E)
+val DarkSurfaceContainerHighest = Color(0xFF242426)
 
 val BrandCyan = Color(0xFF38BDF8)
 val DangerRed = Color(0xFFB3261E)

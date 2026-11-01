@@ -1,6 +1,7 @@
 package com.yukiorita.halfbrowser.data
 
 import android.content.Context
+import com.yukiorita.halfbrowser.core.BackupRules
 import com.yukiorita.halfbrowser.core.Bookmark
 import com.yukiorita.halfbrowser.core.Codecs
 import com.yukiorita.halfbrowser.core.UrlNormalizer
@@ -68,6 +69,24 @@ class BookmarkRepository(context: Context) {
 
     fun delete(id: String) {
         mutate { current -> current.filterNot { it.id == id } }
+    }
+
+    /** Bulk replacement used by backup restore. Invalid entries are dropped. */
+    fun replaceAll(items: List<Bookmark>) {
+        val cleaned = items.asSequence()
+            .filter { it.id.isNotBlank() }
+            .mapNotNull { item ->
+                val url = UrlNormalizer.validateWebUrl(item.url) ?: return@mapNotNull null
+                item.copy(
+                    url = url,
+                    title = item.title.trim().take(200),
+                    glyph = item.glyph.trim().take(2),
+                )
+            }
+            .distinctBy { it.id }
+            .take(BackupRules.MAX_BOOKMARKS)
+            .toList()
+        mutate { cleaned }
     }
 
     fun move(fromIndex: Int, toIndex: Int) {

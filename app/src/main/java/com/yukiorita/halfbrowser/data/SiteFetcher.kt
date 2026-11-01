@@ -3,6 +3,7 @@ package com.yukiorita.halfbrowser.data
 import android.util.Base64
 import com.yukiorita.halfbrowser.core.Bookmark
 import com.yukiorita.halfbrowser.core.SiteContent
+import com.yukiorita.halfbrowser.core.StoredCredential
 import com.yukiorita.halfbrowser.core.TrustPolicy
 import com.yukiorita.halfbrowser.core.TrustedSite
 import com.yukiorita.halfbrowser.core.WatchRules

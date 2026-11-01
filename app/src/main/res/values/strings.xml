@@ -18,7 +18,6 @@
     <string name="home_menu_shortcut">Add to home screen</string>
     <string name="home_menu_share">Share</string>
     <string name="home_untitled">Bookmark</string>
-    <string name="home_default_browser_set">Set Half-Browser as your default browser</string>
 
     <!-- Bookmark editor -->
     <string name="bookmark_new_title">New bookmark</string>
@@ -181,13 +180,6 @@
     <string name="settings_clear_data_desc">Cookies, cache and local storage. Bookmarks, settings and saved sign-ins are kept.</string>
     <string name="settings_clear_data_title">Clear browsing data?</string>
     <string name="settings_clear_data_message">Cookies, cache and site storage will be removed. Bookmarks, settings and saved sign-ins stay.</string>
-    <string name="settings_section_browser">Browser</string>
-    <string name="settings_default_browser">Default browser</string>
-    <string name="settings_default_browser_desc">Android lets you choose which app opens links. Set Half-Browser as the default to receive links from other apps.</string>
-    <string name="settings_set_default_browser">Set as default browser</string>
-    <string name="settings_default_browser_status_on">Half-Browser is the default browser.</string>
-    <string name="settings_default_browser_status_off">Half-Browser is not the default browser.</string>
-    <string name="settings_default_browser_unavailable">This device does not support the browser role. Choose a default browser in system settings.</string>
     <string name="settings_section_about">About</string>
     <string name="settings_version">Version %1$s</string>
     <string name="settings_about_body">Half-Browser is a small Chromium browser (Android WebView) for pages you trust, including local HTTPS servers with self-signed certificates.</string>
@@ -242,6 +234,54 @@
     <string name="bookmark_notify_enabled">Notifications enabled for %1$s</string>
     <string name="bookmark_notify_disabled">Notifications disabled for %1$s</string>
     <string name="notification_permission_denied_toast">Allow notifications in Android settings to receive site updates.</string>
+
+    <string name="settings_accent">Accent colour</string>
+    <string name="settings_accent_hue">Hue</string>
+    <string name="settings_accent_saturation">Saturation</string>
+    <string name="settings_accent_brightness">Brightness</string>
+    <string name="settings_accent_degrees">%1$d°</string>
+    <string name="settings_accent_percent">%1$d%%</string>
+    <string name="settings_accent_reset">Reset accent</string>
+    <string name="settings_accent_note">Dark mode always keeps a black background with white text.</string>
+    <string name="settings_accent_preview_primary">Primary</string>
+    <string name="settings_accent_preview_container">Container</string>
+    <string name="settings_accent_preview_tertiary">Accent 2</string>
+    <string name="settings_section_backup">Backup and restore</string>
+    <string name="settings_backup_desc">Export bookmarks, settings, trusted certificates, site notifications and saved sign-ins to one JSON file, then import it on another device.</string>
+    <string name="settings_backup_export">Export</string>
+    <string name="settings_backup_import">Import</string>
+    <string name="settings_backup_note">Only the file you pick is read or written.</string>
+    <string name="settings_backup_export_title">Export app data</string>
+    <string name="settings_backup_include_passwords">Include saved passwords (%1$d)</string>
+    <string name="settings_backup_include_passwords_desc">Passwords are encrypted with a passphrase you choose. Leave this off to export everything else without passwords.</string>
+    <string name="settings_backup_no_passwords">No saved sign-ins to include.</string>
+    <string name="settings_backup_export_continue">Continue</string>
+    <string name="settings_backup_passphrase_set_title">Choose a passphrase</string>
+    <string name="settings_backup_passphrase">Passphrase</string>
+    <string name="settings_backup_passphrase_confirm">Confirm passphrase</string>
+    <string name="settings_backup_passphrase_note">At least 8 characters. If you lose this passphrase the passwords cannot be recovered, and it cannot be reset.</string>
+    <string name="settings_backup_passphrase_too_short">Use at least 8 characters.</string>
+    <string name="settings_backup_passphrase_mismatch">The passphrases do not match.</string>
+    <string name="settings_backup_export_ok">Backup exported.</string>
+    <string name="settings_backup_export_failed">Could not write the backup file.</string>
+    <string name="settings_backup_import_title">Import backup</string>
+    <string name="settings_backup_import_summary">Exported %1$s · app version %2$s</string>
+    <string name="settings_backup_import_counts">%1$d bookmarks · %2$d certificates · %3$d watched pages · %4$d passwords</string>
+    <string name="settings_backup_mode">How to import</string>
+    <string name="settings_backup_mode_merge">Merge (keep this device\'s data)</string>
+    <string name="settings_backup_mode_replace">Replace all data on this device</string>
+    <string name="settings_backup_mode_replace_warning">Bookmarks, trusted certificates, watches and settings on this device will be replaced.</string>
+    <string name="settings_backup_mode_replace_confirm">I understand the existing data will be replaced</string>
+    <string name="settings_backup_credentials_locked">Include encrypted saved passwords (%1$d)</string>
+    <string name="settings_backup_credentials_hint">Wrong passphrase: everything else is imported and the passwords are skipped.</string>
+    <string name="settings_backup_credentials_skipped">Saved passwords were not imported.</string>
+    <string name="settings_backup_start">Import</string>
+    <string name="settings_backup_error_empty">The file is empty.</string>
+    <string name="settings_backup_error_large">The file is too large (4 MB limit).</string>
+    <string name="settings_backup_error_invalid">This file is not valid JSON.</string>
+    <string name="settings_backup_error_format">This is not a Half-Browser backup.</string>
+    <string name="settings_backup_error_version">This backup was made by a newer version of Half-Browser.</string>
+    <string name="settings_backup_import_ok">Imported %1$d bookmarks, %2$d certificates, %3$d watched pages and %4$d sign-ins.</string>
 
     <!-- Accessibility -->
     <string name="cd_home">Home</string>

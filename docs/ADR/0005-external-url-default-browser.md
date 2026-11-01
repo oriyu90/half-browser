@@ -131,4 +131,8 @@
 
 ## Status
 
+**Accepted**（v1.2.0 で一部改訂: アプリ内の「既定のブラウザに設定」ボタンと案内は削除。
+OS の役割はアプリから強制できず、ボタンは役割要求画面を開くだけで実益が薄いため。
+`VIEW` の intent-filter は残し、他アプリの「アプリで開く」候補には出る）。
+
 **Accepted**。`defaultBrowserPromptShown` の追加は `AppSettings` の後方互換（既定値付きフィールド追加）として行い、`Codecs.sanitize` の対象外（真偽値はそのまま）。

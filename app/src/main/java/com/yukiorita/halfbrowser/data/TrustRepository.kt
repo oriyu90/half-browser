@@ -74,6 +74,25 @@ class TrustRepository(context: Context) {
         }
     }
 
+    /** Bulk replacement used by backup restore. */
+    fun replaceAll(items: List<TrustedSite>) {
+        val cleaned = items.asSequence()
+            .filter { it.host.isNotBlank() && it.fingerprintSha256.isNotBlank() }
+            .map {
+                it.copy(
+                    host = it.host.trim().lowercase().take(255),
+                    port = it.port.coerceIn(0, 65535),
+                    fingerprintSha256 = TrustPolicy.normalizeFingerprint(it.fingerprintSha256),
+                    subject = it.subject.take(300),
+                    issuer = it.issuer.take(300),
+                )
+            }
+            .distinctBy { it.host + ":" + it.port }
+            .take(100)
+            .toList()
+        mutable { cleaned }
+    }
+
     private fun mutable(transform: (List<TrustedSite>) -> List<TrustedSite>) {
         synchronized(lock) {
             val updated = transform(_sites.value)

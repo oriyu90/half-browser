@@ -2,8 +2,6 @@ package com.yukiorita.halfbrowser.ui.home
 
 import android.content.Context
 import android.content.Intent
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.combinedClickable
@@ -31,21 +29,17 @@ import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.BookmarkAdd
-import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.NotificationsOff
 import androidx.compose.material.icons.filled.OpenInNew
-import androidx.compose.material.icons.filled.Public
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
@@ -61,7 +55,6 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -81,9 +74,6 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.lifecycle.Lifecycle
-import androidx.lifecycle.LifecycleEventObserver
-import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.yukiorita.halfbrowser.AppContainer
 import com.yukiorita.halfbrowser.R
@@ -94,7 +84,6 @@ import com.yukiorita.halfbrowser.core.UrlNormalizer
 import com.yukiorita.halfbrowser.shortcuts.BookmarkShortcuts
 import com.yukiorita.halfbrowser.work.WatchScheduler
 import com.yukiorita.halfbrowser.ui.components.BookmarkEditorDialog
-import com.yukiorita.halfbrowser.ui.components.DefaultBrowser
 import kotlinx.coroutines.launch
 import kotlin.math.roundToInt
 
@@ -118,25 +107,6 @@ fun HomeScreen(
     var editingTarget by remember { mutableStateOf<EditingTarget?>(null) }
     var menuTarget by remember { mutableStateOf<Bookmark?>(null) }
     var deleteTarget by remember { mutableStateOf<Bookmark?>(null) }
-
-    val roleSupported = remember { DefaultBrowser.isSupported(context) }
-    var isDefaultBrowser by remember { mutableStateOf(DefaultBrowser.isDefault(context)) }
-    val roleLauncher = rememberLauncherForActivityResult(
-        ActivityResultContracts.StartActivityForResult(),
-    ) {
-        isDefaultBrowser = DefaultBrowser.isDefault(context)
-    }
-
-    val lifecycleOwner = LocalLifecycleOwner.current
-    DisposableEffect(lifecycleOwner) {
-        val observer = LifecycleEventObserver { _, event ->
-            if (event == Lifecycle.Event.ON_RESUME) {
-                isDefaultBrowser = DefaultBrowser.isDefault(context)
-            }
-        }
-        lifecycleOwner.lifecycle.addObserver(observer)
-        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
-    }
 
     LaunchedEffect(bookmarks) {
         BookmarkShortcuts.syncDynamic(context, bookmarks)
@@ -264,20 +234,6 @@ fun HomeScreen(
                             onQueryChange = { query = it },
                             onSubmit = { submitQuery() },
                         )
-                    }
-
-                    if (roleSupported && !isDefaultBrowser) {
-                        item(span = { GridItemSpan(maxLineSpan) }) {
-                            DefaultBrowserCard(
-                                onClick = {
-                                    val intent = DefaultBrowser.requestIntent(context)
-                                    if (intent != null) {
-                                        runCatching { roleLauncher.launch(intent) }
-                                            .onFailure { isDefaultBrowser = DefaultBrowser.isDefault(context) }
-                                    }
-                                },
-                            )
-                        }
                     }
 
                     if (bookmarks.isEmpty()) {
@@ -501,32 +457,6 @@ private fun AddressBar(
         keyboardOptions = KeyboardOptions(imeAction = ImeAction.Go),
         keyboardActions = KeyboardActions(onGo = { onSubmit() }),
     )
-}
-
-@Composable
-private fun DefaultBrowserCard(onClick: () -> Unit) {
-    Card(
-        onClick = onClick,
-        modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.primaryContainer,
-            contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
-        ),
-    ) {
-        Row(
-            modifier = Modifier.padding(16.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Icon(Icons.Filled.Public, contentDescription = null)
-            Spacer(Modifier.width(12.dp))
-            Text(
-                text = stringResource(R.string.home_default_browser_set),
-                style = MaterialTheme.typography.bodyMedium,
-                modifier = Modifier.weight(1f),
-            )
-            Icon(Icons.Filled.ChevronRight, contentDescription = null)
-        }
-    }
 }
 
 @Composable

@@ -85,7 +85,6 @@ import com.yukiorita.halfbrowser.core.TrustPolicy
 import com.yukiorita.halfbrowser.core.BookmarkIcons
 import com.yukiorita.halfbrowser.core.SiteWatch
 import com.yukiorita.halfbrowser.core.WatchRules
-import com.yukiorita.halfbrowser.ui.components.DefaultBrowser
 import com.yukiorita.halfbrowser.work.WatchScheduler
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -121,17 +120,10 @@ fun SettingsScreen(
         }.getOrDefault(false)
     }
 
-    val roleSupported = remember { DefaultBrowser.isSupported(context) }
-    var isDefaultBrowser by remember { mutableStateOf(DefaultBrowser.isDefault(context)) }
-    val roleLauncher = rememberLauncherForActivityResult(
-        ActivityResultContracts.StartActivityForResult(),
-    ) { isDefaultBrowser = DefaultBrowser.isDefault(context) }
-
     val lifecycleOwner = LocalLifecycleOwner.current
     DisposableEffect(lifecycleOwner) {
         val observer = LifecycleEventObserver { _, event ->
             if (event == Lifecycle.Event.ON_RESUME) {
-                isDefaultBrowser = DefaultBrowser.isDefault(context)
                 credentials = container.credentials.all()
                 notificationsAllowed = runCatching {
                     NotificationManagerCompat.from(context).areNotificationsEnabled()
@@ -238,6 +230,9 @@ fun SettingsScreen(
                                 container.settings.update { current -> current.copy(dynamicColor = it) }
                             },
                         )
+                        AccentSettings(settings = settings) { transform ->
+                            container.settings.update(transform)
+                        }
                         HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
                         Text(
                             text = stringResource(R.string.settings_language),
@@ -338,11 +333,7 @@ fun SettingsScreen(
                         SearchEngine.entries.forEach { engine ->
                             RadioRow(
                                 selected = settings.searchEngine == engine,
-                                label = when (engine) {
-                                    SearchEngine.GOOGLE -> "Google"
-                                    SearchEngine.DUCKDUCKGO -> "DuckDuckGo"
-                                    SearchEngine.BING -> "Bing"
-                                },
+                                label = engine.label,
                                 onClick = {
                                     container.settings.update { it.copy(searchEngine = engine) }
                                 },
@@ -715,43 +706,11 @@ fun SettingsScreen(
                 }
 
                 item {
-                    SettingsCard(title = stringResource(R.string.settings_section_browser)) {
-                        Text(
-                            text = stringResource(R.string.settings_default_browser),
-                            style = MaterialTheme.typography.titleSmall,
+                    SettingsCard(title = stringResource(R.string.settings_section_backup)) {
+                        BackupSettingsCard(
+                            container = container,
+                            onImported = { credentials = container.credentials.all() },
                         )
-                        Text(
-                            text = if (!roleSupported) {
-                                stringResource(R.string.settings_default_browser_unavailable)
-                            } else if (isDefaultBrowser) {
-                                stringResource(R.string.settings_default_browser_status_on)
-                            } else {
-                                stringResource(R.string.settings_default_browser_status_off)
-                            },
-                            style = MaterialTheme.typography.bodySmall,
-                            color = if (isDefaultBrowser) {
-                                MaterialTheme.colorScheme.primary
-                            } else {
-                                MaterialTheme.colorScheme.onSurfaceVariant
-                            },
-                        )
-                        Text(
-                            text = stringResource(R.string.settings_default_browser_desc),
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                        if (roleSupported && !isDefaultBrowser) {
-                            TextButton(
-                                onClick = {
-                                    val intent = DefaultBrowser.requestIntent(context)
-                                    if (intent != null) {
-                                        runCatching { roleLauncher.launch(intent) }
-                                    }
-                                },
-                            ) {
-                                Text(stringResource(R.string.settings_set_default_browser))
-                            }
-                        }
                     }
                 }
 

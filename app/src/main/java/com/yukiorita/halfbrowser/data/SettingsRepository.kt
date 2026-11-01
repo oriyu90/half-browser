@@ -35,6 +35,9 @@ class SettingsRepository(context: Context) {
 
     fun current(): AppSettings = _settings.value
 
+    /** Bulk replacement used by backup restore. */
+    fun replace(settings: AppSettings): AppSettings = update { settings }
+
     fun setThemeMode(mode: com.yukiorita.halfbrowser.core.ThemeMode) =
         update { it.copy(themeMode = mode) }
 

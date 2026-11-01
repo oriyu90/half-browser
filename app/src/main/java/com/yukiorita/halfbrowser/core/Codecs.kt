@@ -31,6 +31,10 @@ object Codecs {
         language = if (settings.language in LanguageMode.entries) settings.language else LanguageMode.SYSTEM,
         searchEngine = settings.searchEngine,
         themeMode = if (settings.themeMode in ThemeMode.entries) settings.themeMode else ThemeMode.SYSTEM,
+        accentHue = ((settings.accentHue % 360f) + 360f) % 360f,
+        accentSaturation = settings.accentSaturation
+            .coerceIn(AppSettings.MIN_ACCENT_SATURATION, AppSettings.MAX_ACCENT_SATURATION),
+        accentTone = settings.accentTone.coerceIn(0f, 1f),
     )
 
     fun encodeBookmarks(items: List<Bookmark>): String =

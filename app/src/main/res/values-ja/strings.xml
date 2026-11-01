@@ -18,7 +18,6 @@
     <string name="home_menu_shortcut">ホーム画面に追加</string>
     <string name="home_menu_share">共有</string>
     <string name="home_untitled">ブックマーク</string>
-    <string name="home_default_browser_set">ハーフブラウザを既定のブラウザに設定</string>
 
     <!-- Bookmark editor -->
     <string name="bookmark_new_title">新しいブックマーク</string>
@@ -181,13 +180,6 @@
     <string name="settings_clear_data_desc">Cookie・キャッシュ・ローカルストレージ。ブックマーク・設定・保存したサインインは残ります。</string>
     <string name="settings_clear_data_title">閲覧データを消去しますか？</string>
     <string name="settings_clear_data_message">Cookie・キャッシュ・サイトのストレージを削除します。ブックマーク・設定・保存したサインインは残ります。</string>
-    <string name="settings_section_browser">ブラウザ</string>
-    <string name="settings_default_browser">既定のブラウザ</string>
-    <string name="settings_default_browser_desc">Androidではリンクを開くアプリを選べます。ハーフブラウザを既定にすると、他のアプリからリンクを受け取れます。</string>
-    <string name="settings_set_default_browser">既定のブラウザに設定</string>
-    <string name="settings_default_browser_status_on">ハーフブラウザは既定のブラウザです。</string>
-    <string name="settings_default_browser_status_off">ハーフブラウザは既定のブラウザではありません。</string>
-    <string name="settings_default_browser_unavailable">この端末はブラウザロールに対応していません。システム設定で既定のブラウザを選んでください。</string>
     <string name="settings_section_about">このアプリについて</string>
     <string name="settings_version">バージョン %1$s</string>
     <string name="settings_about_body">ハーフブラウザは、信頼したページのための小さなChromiumブラウザ（Android WebView）です。自己署名証明書を使うローカルHTTPSサーバーにも対応します。</string>
@@ -242,6 +234,54 @@
     <string name="bookmark_notify_enabled">%1$s の通知を有効にしました</string>
     <string name="bookmark_notify_disabled">%1$s の通知を無効にしました</string>
     <string name="notification_permission_denied_toast">サイトの更新通知を受け取るには、Android の設定で通知を許可してください。</string>
+
+    <string name="settings_accent">アクセントカラー</string>
+    <string name="settings_accent_hue">色相</string>
+    <string name="settings_accent_saturation">彩度</string>
+    <string name="settings_accent_brightness">明るさ</string>
+    <string name="settings_accent_degrees">%1$d°</string>
+    <string name="settings_accent_percent">%1$d%%</string>
+    <string name="settings_accent_reset">色をリセット</string>
+    <string name="settings_accent_note">ダークモードは常に黒背景・白文字です。</string>
+    <string name="settings_accent_preview_primary">メイン</string>
+    <string name="settings_accent_preview_container">コンテナ</string>
+    <string name="settings_accent_preview_tertiary">サブ</string>
+    <string name="settings_section_backup">バックアップと復元</string>
+    <string name="settings_backup_desc">ブックマーク・設定・信頼した証明書・サイト通知・保存したサインインを1つのJSONファイルに書き出し、別の端末で読み込めます。</string>
+    <string name="settings_backup_export">エクスポート</string>
+    <string name="settings_backup_import">インポート</string>
+    <string name="settings_backup_note">読み書きするのは選択したファイルだけです。</string>
+    <string name="settings_backup_export_title">アプリデータを書き出す</string>
+    <string name="settings_backup_include_passwords">保存したパスワード %1$d 件を含める</string>
+    <string name="settings_backup_include_passwords_desc">パスワードは設定したパスフレーズで暗号化します。オフのままならパスワード以外を書き出します。</string>
+    <string name="settings_backup_no_passwords">含められる保存済みサインインはありません。</string>
+    <string name="settings_backup_export_continue">次へ</string>
+    <string name="settings_backup_passphrase_set_title">パスフレーズを設定</string>
+    <string name="settings_backup_passphrase">パスフレーズ</string>
+    <string name="settings_backup_passphrase_confirm">パスフレーズ（確認）</string>
+    <string name="settings_backup_passphrase_note">8文字以上。このパスフレーズを忘れるとパスワードは復元できません（再設定できません）。</string>
+    <string name="settings_backup_passphrase_too_short">8文字以上にしてください。</string>
+    <string name="settings_backup_passphrase_mismatch">パスフレーズが一致しません。</string>
+    <string name="settings_backup_export_ok">バックアップを書き出しました。</string>
+    <string name="settings_backup_export_failed">バックアップを書き出せませんでした。</string>
+    <string name="settings_backup_import_title">バックアップを読み込む</string>
+    <string name="settings_backup_import_summary">%1$s に書き出し（アプリ v%2$s）</string>
+    <string name="settings_backup_import_counts">ブックマーク %1$d 件・証明書 %2$d 件・監視ページ %3$d 件・パスワード %4$d 件</string>
+    <string name="settings_backup_mode">読み込み方法</string>
+    <string name="settings_backup_mode_merge">統合（この端末のデータを残す）</string>
+    <string name="settings_backup_mode_replace">この端末のデータをすべて置き換える</string>
+    <string name="settings_backup_mode_replace_warning">ブックマーク・信頼した証明書・監視設定・設定が置き換わります。</string>
+    <string name="settings_backup_mode_replace_confirm">既存データが置き換わることを理解しました</string>
+    <string name="settings_backup_credentials_locked">暗号化されたパスワード %1$d 件を含める</string>
+    <string name="settings_backup_credentials_hint">パスフレーズが違う場合、ほかのデータだけ読み込み、パスワードは取り込みません。</string>
+    <string name="settings_backup_credentials_skipped">保存したパスワードは取り込んでいません。</string>
+    <string name="settings_backup_start">読み込む</string>
+    <string name="settings_backup_error_empty">ファイルが空です。</string>
+    <string name="settings_backup_error_large">ファイルが大きすぎます（上限4MB）。</string>
+    <string name="settings_backup_error_invalid">正しいJSONファイルではありません。</string>
+    <string name="settings_backup_error_format">ハーフブラウザのバックアップではありません。</string>
+    <string name="settings_backup_error_version">このバックアップはより新しいバージョンで作成されています。</string>
+    <string name="settings_backup_import_ok">ブックマーク %1$d 件・証明書 %2$d 件・監視ページ %3$d 件・サインイン %4$d 件を読み込みました。</string>
 
     <!-- Accessibility -->
     <string name="cd_home">ホーム</string>
