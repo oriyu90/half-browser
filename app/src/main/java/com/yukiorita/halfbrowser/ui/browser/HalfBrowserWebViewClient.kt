@@ -20,6 +20,7 @@ import android.webkit.WebView
 import android.webkit.WebViewClient
 import androidx.webkit.WebViewCompat
 import com.yukiorita.halfbrowser.AppContainer
+import com.yukiorita.halfbrowser.BuildConfig
 import com.yukiorita.halfbrowser.core.SitePermissionKind
 import com.yukiorita.halfbrowser.core.SitePermissions
 import com.yukiorita.halfbrowser.core.TrustDecision
@@ -71,14 +72,6 @@ internal class HalfBrowserWebViewClient(
         state.progress = 100
         state.currentUrl = url ?: state.currentUrl
         state.canGoBack = view?.canGoBack() == true
-        // Chromium resets the page scale for each document, so forget the cached
-        // value and restore the user's zoom once the new page has been laid out.
-        state.resetAppliedZoom()
-        state.webView?.let { webView ->
-            webView.postDelayed({
-                runCatching { applyPageZoom(webView, state) }
-            }, 150)
-        }
         val pendingAuth = state.pendingAuthErrorUrl
         if (pendingAuth != null) {
             state.pendingAuthErrorUrl = null

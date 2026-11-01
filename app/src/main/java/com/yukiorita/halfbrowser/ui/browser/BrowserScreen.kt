@@ -567,8 +567,7 @@ fun BrowserScreen(
                     state = state,
                     container = container,
                     context = context,
-                    textZoomPercent = (settings.fontScale * 100).roundToInt(),
-                    pageZoom = settings.uiScale,
+                    textZoomPercent = webTextZoomPercent(settings),
                     darkTheme = darkTheme,
                     toast = toast,
                     onSettingsRequested = { settingsOpen = true },
@@ -1348,7 +1347,6 @@ private fun WebViewHost(
     container: AppContainer,
     context: Context,
     textZoomPercent: Int,
-    pageZoom: Float,
     darkTheme: Boolean,
     toast: (String) -> Unit,
     onSettingsRequested: () -> Unit,
@@ -1369,8 +1367,6 @@ private fun WebViewHost(
                 // cover the Compose chrome bar.
                 setBackgroundColor(backgroundColor)
                 configureWebView(this, textZoomPercent, darkTheme)
-                state.pageZoom = pageZoom
-                applyPageZoom(this, state)
                 state.defaultUserAgent = this.settings.userAgentString.orEmpty()
                 webViewClient = HalfBrowserWebViewClient(
                     context = context,
@@ -1419,10 +1415,7 @@ private fun WebViewHost(
             )
             frame
         },
-        update = { _ ->
-            state.pageZoom = pageZoom
-            state.webView?.let { applyPageZoom(it, state) }
-        },
+        update = { },
     )
     }
 }
@@ -1530,33 +1523,20 @@ private fun configureWebView(webView: WebView, textZoomPercent: Int, darkTheme: 
 }
 
 /**
- * Applies the UI scale to the page itself.
+ * Text zoom handed to the WebView.
  *
- * Measured on Android System WebView 113 (API 34):
- *  - `setInitialScale()` is ignored as soon as the page declares
- *    `<meta name="viewport" content="width=device-width, initial-scale=1">`
- *    (DSH does), and rewriting that meta from script has no effect either.
- *  - CSS `zoom` reflows the page but shifts `position: fixed` elements, which is
- *    the same class of breakage the v1.3 viewport shim caused.
- *  - the WebView page scale (what pinch-zoom drives) magnifies everything
- *    without touching the document, so fixed headers and `100vh` keep their
- *    geometry.
+ * The UI scale multiplies the text scale so raising it also enlarges the page's
+ * text, and Chromium re-lays the text out (it reflows instead of overflowing).
  *
- * Page scale resets on every navigation, so the client re-applies it after each
- * load (`appliedZoom` is reset there). Re-applying only on an actual change
- * avoids a visible reset-then-zoom flicker on every recomposition.
+ * Why not a whole-page zoom: `setInitialScale()` is ignored as soon as the page
+ * declares `<meta name="viewport" content="width=device-width, initial-scale=1">`
+ * (DSH does), and CSS `zoom` on the root element multiplies the height of
+ * `100dvh` layouts — on DSH the document stopped scrolling (`scrollY` stayed 0)
+ * and the composer became unreachable. Both were measured on WebView 113, so the
+ * only zoom that keeps a fixed-height app usable is the text zoom.
  */
-internal fun applyPageZoom(webView: WebView, state: BrowserState) {
-    val target = state.pageZoom.coerceIn(0.5f, 2f)
-    if (state.zoomAlreadyApplied(target)) return
-    runCatching {
-        val current = webView.scale
-        // zoomBy() is relative, so normalise before applying a new factor.
-        if (current > 0f && current != 1f) webView.zoomBy(1f / current)
-        if (target != 1f) webView.zoomBy(target)
-    }
-    state.markZoomApplied(target)
-}
+internal fun webTextZoomPercent(settings: com.yukiorita.halfbrowser.core.AppSettings): Int =
+    (settings.fontScale * settings.uiScale * 100).roundToInt().coerceIn(50, 200)
 
 private var debuggingConfigured = false
 

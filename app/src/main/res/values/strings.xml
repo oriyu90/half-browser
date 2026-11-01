@@ -359,4 +359,8 @@
     <string name="settings_notifications_web_title">Web notifications</string>
     <string name="settings_notifications_web_desc">A page can only show notifications after you allow that site, in the prompt or under Site permissions.</string>
     <string name="settings_page_zoom_note">UI scale is applied to web pages as page zoom.</string>
+    <string name="settings_web_zoom_mode">How pages zoom</string>
+    <string name="settings_web_zoom_text">Text only (reflows)</string>
+    <string name="settings_web_zoom_page">Whole page (pinch zoom)</string>
+    <string name="settings_web_zoom_note">Text only keeps the layout intact and never needs horizontal scrolling. Whole page makes everything bigger, like a pinch zoom.</string>
 </resources>

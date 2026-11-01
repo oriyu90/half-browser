@@ -52,6 +52,7 @@ data class TrustedSiteList(
 
 enum class ThemeMode { SYSTEM, LIGHT, DARK }
 
+
 enum class LanguageMode(val tag: String) {
     SYSTEM(""),
     JAPANESE("ja"),

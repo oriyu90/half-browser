@@ -359,4 +359,8 @@
     <string name="settings_notifications_web_title">Web通知</string>
     <string name="settings_notifications_web_desc">ページが通知を出せるのは、確認ダイアログか「サイトの権限」でそのサイトを許可した後だけです。</string>
     <string name="settings_page_zoom_note">UIスケールはWebページのページズームとしても反映されます。</string>
+    <string name="settings_web_zoom_mode">Webページの拡大方法</string>
+    <string name="settings_web_zoom_text">文字だけ拡大（折り返し）</string>
+    <string name="settings_web_zoom_page">ページ全体（ピンチズーム相当）</string>
+    <string name="settings_web_zoom_note">「文字だけ」はレイアウトを変えずに文字を大きくするので横スクロールが発生しません。「ページ全体」は全てが大きくなりますが、拡大率が高いと横スクロールが必要になります。</string>
 </resources>

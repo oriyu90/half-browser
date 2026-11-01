@@ -48,22 +48,6 @@ class BrowserState {
     /** Bumped when the renderer process dies so Compose builds a fresh WebView. */
     var generation by mutableIntStateOf(0)
 
-    /** Page zoom requested by the settings (1.0 = 100%). */
-    var pageZoom: Float = 1f
-
-    /** Zoom that has already been pushed into the WebView. */
-    private var appliedZoom: Float = 1f
-
-    internal fun zoomAlreadyApplied(target: Float): Boolean = appliedZoom == target
-
-    internal fun markZoomApplied(target: Float) {
-        appliedZoom = target
-    }
-
-    /** Called after a navigation, where Chromium resets the page scale to 100%. */
-    internal fun resetAppliedZoom() {
-        appliedZoom = 1f
-    }
 }
 
 enum class ErrorKind { NETWORK, AUTH, CERT }
