@@ -13,6 +13,7 @@ import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.app.NotificationManagerCompat
+import androidx.webkit.WebViewCompat
 import androidx.core.content.ContextCompat
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
@@ -83,6 +84,7 @@ import com.yukiorita.halfbrowser.core.SearchEngine
 import com.yukiorita.halfbrowser.core.ThemeMode
 import com.yukiorita.halfbrowser.core.TrustPolicy
 import com.yukiorita.halfbrowser.core.BookmarkIcons
+import com.yukiorita.halfbrowser.core.FormLogin
 import com.yukiorita.halfbrowser.core.SiteWatch
 import com.yukiorita.halfbrowser.core.WatchRules
 import com.yukiorita.halfbrowser.work.WatchScheduler
@@ -103,6 +105,14 @@ fun SettingsScreen(
     var credentials by remember { mutableStateOf(container.credentials.all()) }
     var credentialToDelete by remember { mutableStateOf<CredentialMeta?>(null) }
     var confirmClear by remember { mutableStateOf(false) }
+    val webViewVersion = remember {
+        runCatching { WebViewCompat.getCurrentWebViewPackage(context)?.versionName }
+            .getOrNull()
+            .orEmpty()
+    }
+    val webViewMajor = remember(webViewVersion) {
+        webViewVersion.substringBefore('.').toIntOrNull() ?: 0
+    }
     val bookmarks by container.bookmarks.items.collectAsStateWithLifecycle()
     val watches by container.siteWatch.watches.collectAsStateWithLifecycle()
     val watchSettings by container.siteWatch.settings.collectAsStateWithLifecycle()
@@ -666,8 +676,13 @@ fun SettingsScreen(
                                             text = credential.host,
                                             style = MaterialTheme.typography.bodyMedium,
                                         )
+                                        val realmLabel = if (credential.realm == FormLogin.REALM) {
+                                            stringResource(R.string.form_login_realm)
+                                        } else {
+                                            credential.realm
+                                        }
                                         Text(
-                                            text = listOf(credential.username, credential.realm)
+                                            text = listOf(credential.username, realmLabel)
                                                 .filter { it.isNotBlank() }
                                                 .joinToString(" · "),
                                             style = MaterialTheme.typography.labelSmall,
@@ -684,6 +699,17 @@ fun SettingsScreen(
                                 }
                             }
                         }
+
+                        HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
+
+                        SwitchRow(
+                            title = stringResource(R.string.settings_form_autofill),
+                            description = stringResource(R.string.settings_form_autofill_desc),
+                            checked = settings.formAutofillEnabled,
+                            onCheckedChange = { value ->
+                                container.settings.update { it.copy(formAutofillEnabled = value) }
+                            },
+                        )
 
                         HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
 
@@ -741,12 +767,48 @@ fun SettingsScreen(
                                     style = MaterialTheme.typography.labelSmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 )
+                                if (webViewVersion.isNotBlank()) {
+                                    Text(
+                                        text = stringResource(R.string.settings_webview_version, webViewVersion),
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    )
+                                }
                             }
                         }
                         Text(
                             text = stringResource(R.string.settings_about_body),
                             style = MaterialTheme.typography.bodySmall,
                         )
+                        if (webViewVersion.isNotBlank() && webViewMajor in 1..119) {
+                            Text(
+                                text = stringResource(R.string.settings_webview_old),
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.error,
+                            )
+                            TextButton(
+                                onClick = {
+                                    val market = Intent(
+                                        Intent.ACTION_VIEW,
+                                        android.net.Uri.parse(
+                                            "market://details?id=com.google.android.webview",
+                                        ),
+                                    ).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                                    val web = Intent(
+                                        Intent.ACTION_VIEW,
+                                        android.net.Uri.parse(
+                                            "https://play.google.com/store/apps/details?id=com.google.android.webview",
+                                        ),
+                                    ).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                                    val opened = runCatching { context.startActivity(market) }
+                                    if (opened.isFailure) {
+                                        runCatching { context.startActivity(web) }
+                                    }
+                                },
+                            ) {
+                                Text(stringResource(R.string.settings_webview_update))
+                            }
+                        }
                         Text(
                             text = stringResource(R.string.settings_privacy),
                             style = MaterialTheme.typography.labelSmall,

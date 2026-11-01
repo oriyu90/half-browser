@@ -4,6 +4,7 @@ import android.content.Context
 import com.yukiorita.halfbrowser.core.NavigationRequest
 import com.yukiorita.halfbrowser.data.BookmarkRepository
 import com.yukiorita.halfbrowser.data.CredentialStore
+import com.yukiorita.halfbrowser.data.HistoryRepository
 import com.yukiorita.halfbrowser.data.SettingsRepository
 import com.yukiorita.halfbrowser.data.SiteFetcher
 import com.yukiorita.halfbrowser.data.SiteWatchRepository
@@ -30,6 +31,7 @@ class AppContainer(context: Context) {
     val trust: TrustRepository by lazy { TrustRepository(appContext) }
     val credentials: CredentialStore by lazy { CredentialStore(appContext) }
     val siteWatch: SiteWatchRepository by lazy { SiteWatchRepository(appContext) }
+    val history: HistoryRepository by lazy { HistoryRepository(appContext) }
     val siteFetcher: SiteFetcher by lazy { SiteFetcher(trust, credentials) }
 
     private val _trustRevision = MutableStateFlow(0)

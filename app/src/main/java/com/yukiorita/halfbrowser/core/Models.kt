@@ -93,6 +93,8 @@ data class AppSettings(
     val accentSaturation: Float = 0.86f,
     /** Accent brightness/lightness bias, 0-1 (0.5 is neutral). */
     val accentTone: Float = 0.5f,
+    /** Fill saved HTML form logins on https pages. Never submits automatically. */
+    val formAutofillEnabled: Boolean = true,
 ) {
     companion object {
         val DEFAULT = AppSettings()

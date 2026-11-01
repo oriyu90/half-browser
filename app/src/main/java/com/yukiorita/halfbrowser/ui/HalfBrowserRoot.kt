@@ -11,6 +11,7 @@ import com.yukiorita.halfbrowser.AppContainer
 import com.yukiorita.halfbrowser.NavEvent
 import com.yukiorita.halfbrowser.core.NavigationRequest
 import com.yukiorita.halfbrowser.ui.browser.BrowserScreen
+import com.yukiorita.halfbrowser.ui.history.HistoryScreen
 import com.yukiorita.halfbrowser.ui.home.HomeScreen
 import com.yukiorita.halfbrowser.ui.settings.SettingsScreen
 import com.yukiorita.halfbrowser.ui.theme.HalfBrowserTheme
@@ -19,6 +20,7 @@ private object Routes {
     const val HOME = "home"
     const val BROWSER = "browser"
     const val SETTINGS = "settings"
+    const val HISTORY = "history"
 }
 
 @Composable
@@ -59,6 +61,7 @@ fun HalfBrowserRoot(container: AppContainer) {
                         container = container,
                         onOpenRequest = { url, bookmarkId -> container.requestOpen(url, bookmarkId) },
                         onOpenSettings = { container.requestSettings() },
+                        onOpenHistory = { nav.navigate(Routes.HISTORY) { launchSingleTop = true } },
                     )
                 }
                 composable(Routes.BROWSER) {
@@ -75,6 +78,16 @@ fun HalfBrowserRoot(container: AppContainer) {
                             onOpenSettings = { container.requestSettings() },
                         )
                     }
+                }
+                composable(Routes.HISTORY) {
+                    HistoryScreen(
+                        container = container,
+                        onBack = { nav.popBackStack() },
+                        onOpen = { url ->
+                            container.requestOpen(url)
+                            nav.popBackStack(Routes.HOME, inclusive = false)
+                        },
+                    )
                 }
                 composable(Routes.SETTINGS) {
                     SettingsScreen(

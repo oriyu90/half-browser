@@ -9,6 +9,7 @@ import com.yukiorita.halfbrowser.core.Codecs
 import com.yukiorita.halfbrowser.core.CredentialBundle
 import com.yukiorita.halfbrowser.core.CredentialKey
 import com.yukiorita.halfbrowser.core.CredentialMeta
+import com.yukiorita.halfbrowser.core.FormLogin
 import com.yukiorita.halfbrowser.core.StoredCredential
 import java.util.concurrent.ConcurrentHashMap
 
@@ -86,6 +87,24 @@ class CredentialStore(context: Context) {
      * Used by the background watcher, which learns the realm from the 401 and
      * otherwise just needs "the" credential for that site.
      */
+    /**
+     * Saves an HTML form login. The realm marker keeps it separate from HTTP-auth
+     * realms, and the same https-only rule applies.
+     */
+    fun saveFormLogin(host: String, port: Int, username: String, password: String): Boolean =
+        save("https", host, port, FormLogin.REALM, username, password)
+
+    fun findFormLogin(host: String, port: Int): StoredCredential? {
+        val normalized = host.lowercase().trim()
+        return readAll().values.firstOrNull {
+            it.host == normalized && it.port == port && it.realm == FormLogin.REALM
+        }
+    }
+
+    fun deleteFormLogin(host: String, port: Int) {
+        delete(keyOf("https", host.lowercase().trim(), port, FormLogin.REALM))
+    }
+
     fun findFirstForHost(host: String, port: Int): StoredCredential? {
         val normalizedHost = host.lowercase().trim()
         return readAll().values.firstOrNull {

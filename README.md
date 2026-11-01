@@ -33,7 +33,10 @@ Android 向けの小さな Chromium ブラウザです。ふつうのブラウ�
 | ホーム画面ショートカット | ブックマークごとにピン留めショートカットを作成（ランチャーの確認つき）。動的ショートカットも同期。 |
 | 画面適応 | スマホ縦横・タブレット・折りたたみ。UI スケール 80〜140%、文字スケール 80〜150%、グリッド列数（自動 / 3 / 4 / 5 / 6 / 8）。 |
 | 多言語 | 日本語 / English 完全対応（すべての文字列をリソース化）。アプリ内で言語を切り替え可能。 |
+| 閲覧履歴 | 訪問したページを最大 500 件記録。ホームの時計アイコンから一覧・個別削除・全消去。同一ページの再訪は 30 分以内なら 1 件にまとめます。 |
+| フォームのログイン保存 | 自己署名 HTTPS を含む https ページのログイン欄を、メニューから確認して保存。次回は空欄にだけ自動入力し、送信はしません（設定で OFF 可）。 |
 | サイト通知 | ブックマークしたページをバックグラウンドで定期確認し、内容が変わったら通知します。監視 ON/OFF、間隔（15/30/60/180分）、Wi-Fi のみ、通知権限、最終確認/エラーを設定で管理。アプリを閉じていても WorkManager が実行します。 |
+| WebView 互換 | 古い Android System WebView 向けに `Promise.withResolvers` / `AbortSignal.any` などの標準 API シムをページ読込前に注入。ビューポート高さが 0 になる環境では `vh` を実測 px に補正します。設定に WebView のバージョンを表示します。 |
 | プライバシー | 広告・解析・アカウントなし。JavaScript ブリッジなし。`file://` / `content://` アクセス無効。第三者の Cookie 無効。カメラ・マイク・位置情報はサイトごとに都度確認し、許可した訪問中のみ有効です。 |
 
 ### 画面
@@ -44,7 +47,7 @@ Android 向けの小さな Chromium ブラウザです。ふつうのブラウ�
 
 ## インストール
 
-1. [Releases](https://github.com/oriyu90/half-browser/releases/latest) から `half-browser-1.2.0.apk` をダウンロードします。
+1. [Releases](https://github.com/oriyu90/half-browser/releases/latest) から `half-browser-1.3.0.apk` をダウンロードします。
 2. 端末で「提供元不明のアプリ」を許可してインストールします。
 3. 外部リンクを受け取りたい場合は、Android の設定 → アプリ → 既定のアプリ → ブラウザ で
    Half-Browser を選びます（アプリ内に既定ブラウザ設定ボタンはありません）。
@@ -126,13 +129,27 @@ and store HTTP Basic/Digest credentials encrypted with the Android Keystore. It 
 an app-like bookmark home grid, per-bookmark launcher shortcuts, dark/light/system themes
 (dark is true black with white text), a fine-grained accent-colour editor, one-file
 backup/restore of every custom item (passwords only as a passphrase-encrypted blob),
-adaptive layouts with UI/text scaling, and a full Japanese/English UI. Search engines:
+adaptive layouts with UI/text scaling, browsing history, saved HTML form logins, WebView
+compatibility shims for older Android System WebView builds, and a full Japanese/English UI.
+Search engines:
 Google, DuckDuckGo, Brave, Ecosia, Kagi and Mojeek.
 
 Requires Android 8.0 (API 26) or later. MIT licensed. No ads, analytics, or accounts.
 See [docs/PLAN.md](docs/PLAN.md) and the [ADRs](docs/ADR/) for design decisions.
 
 ## 変更履歴
+
+### v1.3.0（2026-11-01）
+- **DSH などモダンな SPA が表示できない問題を修正**。Compose の `AndroidView` 経由で
+  WebView をホストすると、CSS の `100vh` / `100dvh` が 0 に解決され、`height: 100dvh` で
+  組んだ画面が真っ白になっていました。`vh` を実測値に補正する互換シムを追加し、
+  自己署名 HTTPS のサブリソース（スクリプト/スタイル）も信頼済みホストなら読み込むようにしました。
+- 古い WebView（113 など）向けに `Promise.withResolvers` / `AbortSignal.any` /
+  `Object.groupBy` / `Array.fromAsync` などの標準 API シムを追加。
+- **閲覧履歴**を追加（最大 500 件、個別削除・全消去、30 分以内の再訪はまとめる）。
+- **HTML フォームのログイン保存・自動入力**を追加。https のみ、空欄のみ、送信はしません。
+- 設定に Android System WebView のバージョンを表示し、古い場合は更新を促します。
+- 自己署名 HTTPS サイトで、サブリソースの証明書エラーにより半端に表示される問題を修正。
 
 ### v1.2.0（2026-11-01）
 - 「既定のブラウザに設定」ボタンと設定セクションを削除（OS 設定で選ぶ方式に統一）。

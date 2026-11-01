@@ -186,6 +186,9 @@
     <string name="settings_source">ソースコード</string>
     <string name="settings_license">MITライセンス</string>
     <string name="settings_privacy">解析・追跡・アカウントはありません。</string>
+    <string name="settings_webview_version">Android System WebView %1$s</string>
+    <string name="settings_webview_old">この WebView は古いため、新しいサイトが正しく表示できない場合があります。Android System WebView を更新してください。</string>
+    <string name="settings_webview_update">Android System WebView を更新</string>
 
     <!-- File chooser / web permissions -->
     <string name="file_chooser_title">ファイルを追加</string>
@@ -282,6 +285,26 @@
     <string name="settings_backup_error_format">ハーフブラウザのバックアップではありません。</string>
     <string name="settings_backup_error_version">このバックアップはより新しいバージョンで作成されています。</string>
     <string name="settings_backup_import_ok">ブックマーク %1$d 件・証明書 %2$d 件・監視ページ %3$d 件・サインイン %4$d 件を読み込みました。</string>
+
+    <string name="home_history">閲覧履歴</string>
+    <string name="cd_history">閲覧履歴</string>
+    <string name="history_title">閲覧履歴</string>
+    <string name="history_empty">閲覧履歴はまだありません。</string>
+    <string name="history_clear">履歴を消去</string>
+    <string name="history_clear_title">閲覧履歴をすべて消去しますか？</string>
+    <string name="history_clear_message">閲覧したページの記録をすべて削除します。ブックマーク・設定・保存したサインインは残ります。</string>
+    <string name="browser_menu_save_login">このサイトのログインを保存</string>
+    <string name="form_login_title">このログイン情報を保存しますか？</string>
+    <string name="form_login_site">サイト: %1$s</string>
+    <string name="form_login_username">ユーザー名: %1$s</string>
+    <string name="form_login_password_length">パスワード: %1$d 文字</string>
+    <string name="form_login_note">この端末で暗号化して保存します。https のページでのみ自動入力し、自動送信はしません。</string>
+    <string name="form_login_saved">ログイン情報を保存しました</string>
+    <string name="form_login_save_failed">ログイン情報を保存できませんでした。</string>
+    <string name="form_login_not_found">このページにパスワード欄が見つかりません。</string>
+    <string name="form_login_realm">フォームのログイン</string>
+    <string name="settings_form_autofill">保存したフォームのログインを自動入力</string>
+    <string name="settings_form_autofill_desc">https のページで、空のユーザー名とパスワード欄に自動入力します。フォームの送信はしません。</string>
 
     <!-- Accessibility -->
     <string name="cd_home">ホーム</string>

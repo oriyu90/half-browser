@@ -23,6 +23,7 @@ import com.yukiorita.halfbrowser.AppContainer
 import com.yukiorita.halfbrowser.core.TrustDecision
 import com.yukiorita.halfbrowser.core.TrustPolicy
 import com.yukiorita.halfbrowser.core.AuthAttemptTracker
+import com.yukiorita.halfbrowser.core.FormLogin
 
 /**
  * WebView behaviour for Half-Browser.
@@ -46,6 +47,13 @@ internal class HalfBrowserWebViewClient(
 
     /** scheme://host:port|realm -> number of silent attempts in this screen. */
     private val authAttempts = AuthAttemptTracker()
+
+    /**
+     * Hosts the user already accepted a certificate for in this WebView session.
+     * Sub-resources of those hosts would otherwise be cancelled while the main
+     * document loads, leaving a half-rendered page.
+     */
+    private val sessionAllowedHosts = mutableSetOf<String>()
 
     override fun onPageStarted(view: WebView?, url: String?, favicon: android.graphics.Bitmap?) {
         super.onPageStarted(view, url, favicon)
@@ -73,6 +81,8 @@ internal class HalfBrowserWebViewClient(
         } else {
             verifyLoadedCertificate(view, state.currentUrl)
         }
+        recordHistory(view, url)
+        autofillForm(view, url)
     }
 
     override fun onPageCommitVisible(view: WebView?, url: String?) {
@@ -119,10 +129,23 @@ internal class HalfBrowserWebViewClient(
         } else {
             TrustDecision.Unknown
         }
+        val hostKey = "$host:$port"
 
         if (decision == TrustDecision.Trusted && fingerprint != null) {
             container.trust.markSeen(host, port)
+            sessionAllowedHosts += hostKey
             handler.proceed()
+            return
+        }
+
+        // Sub-resources (scripts, XHR, styles) of an already accepted host must
+        // load; cancelling them was why a self-signed SPA stayed half-rendered.
+        if (mainUrl != null && error.url != mainUrl) {
+            if (hostKey in sessionAllowedHosts) {
+                handler.proceed()
+            } else {
+                handler.cancel()
+            }
             return
         }
 
@@ -138,9 +161,37 @@ internal class HalfBrowserWebViewClient(
             notAfter = notAfterOf(certificate),
             changed = decision is TrustDecision.Changed,
             canPin = TrustPolicy.canPin(error.primaryError),
-            onProceed = { handler.proceed() },
+            onProceed = {
+                sessionAllowedHosts += hostKey
+                handler.proceed()
+            },
             onCancel = { handler.cancel() },
         )
+    }
+
+    private fun recordHistory(view: WebView?, url: String?) {
+        val target = url ?: return
+        if (!target.startsWith("http://") && !target.startsWith("https://")) return
+        runCatching { container.history.record(target, view?.title.orEmpty()) }
+    }
+
+    /**
+     * Fills a saved HTML form login on https pages, only into empty fields and
+     * never submitting. The page cannot read the stored value through a bridge
+     * because no bridge exists: the app injects this script itself.
+     */
+    private fun autofillForm(view: WebView?, url: String?) {
+        val webView = view ?: return
+        val target = url ?: return
+        val uri = runCatching { Uri.parse(target) }.getOrNull() ?: return
+        if (uri.scheme?.lowercase() != "https") return
+        val host = uri.host ?: return
+        if (!container.settings.current().formAutofillEnabled) return
+        val port = uri.port.takeIf { it > 0 } ?: 443
+        val saved = container.credentials.findFormLogin(host, port) ?: return
+        runCatching {
+            webView.evaluateJavascript(FormLogin.fillScript(saved.username, saved.password), null)
+        }
     }
 
     override fun onReceivedHttpAuthRequest(

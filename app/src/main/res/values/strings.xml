@@ -186,6 +186,9 @@
     <string name="settings_source">Source code</string>
     <string name="settings_license">MIT License</string>
     <string name="settings_privacy">No analytics, no tracking, no account.</string>
+    <string name="settings_webview_version">Android System WebView %1$s</string>
+    <string name="settings_webview_old">This WebView is old. Some modern sites may not render correctly until Android System WebView is updated.</string>
+    <string name="settings_webview_update">Update Android System WebView</string>
 
     <!-- File chooser / web permissions -->
     <string name="file_chooser_title">Add a file</string>
@@ -282,6 +285,26 @@
     <string name="settings_backup_error_format">This is not a Half-Browser backup.</string>
     <string name="settings_backup_error_version">This backup was made by a newer version of Half-Browser.</string>
     <string name="settings_backup_import_ok">Imported %1$d bookmarks, %2$d certificates, %3$d watched pages and %4$d sign-ins.</string>
+
+    <string name="home_history">History</string>
+    <string name="cd_history">Browsing history</string>
+    <string name="history_title">History</string>
+    <string name="history_empty">No browsing history yet.</string>
+    <string name="history_clear">Clear history</string>
+    <string name="history_clear_title">Clear all history?</string>
+    <string name="history_clear_message">Every visited page is removed. Bookmarks, settings and saved sign-ins stay.</string>
+    <string name="browser_menu_save_login">Save login for this site</string>
+    <string name="form_login_title">Save this sign-in?</string>
+    <string name="form_login_site">Site: %1$s</string>
+    <string name="form_login_username">User name: %1$s</string>
+    <string name="form_login_password_length">Password: %1$d characters</string>
+    <string name="form_login_note">Encrypted on this device. It is filled only on https pages and never submitted automatically.</string>
+    <string name="form_login_saved">Sign-in saved</string>
+    <string name="form_login_save_failed">Could not save the sign-in.</string>
+    <string name="form_login_not_found">No password field was found on this page.</string>
+    <string name="form_login_realm">Form login</string>
+    <string name="settings_form_autofill">Fill saved form logins</string>
+    <string name="settings_form_autofill_desc">Fills empty user name and password fields on https pages. Never submits the form.</string>
 
     <!-- Accessibility -->
     <string name="cd_home">Home</string>

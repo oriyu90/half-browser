@@ -103,6 +103,7 @@ import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.webkit.WebSettingsCompat
+import androidx.webkit.WebViewCompat
 import androidx.webkit.WebViewFeature
 import com.yukiorita.halfbrowser.AppContainer
 import com.yukiorita.halfbrowser.BuildConfig
@@ -164,6 +165,7 @@ fun BrowserScreen(
     var pendingWebPermission by remember { mutableStateOf<WebPermissionRequest?>(null) }
     var pendingGeoRequest by remember { mutableStateOf<GeoPermissionRequest?>(null) }
     var pendingCameraRequest by remember { mutableStateOf<FileChooserRequest?>(null) }
+    var pendingFormLogin by remember { mutableStateOf<FormLoginTarget?>(null) }
 
     val filePickerLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.StartActivityForResult(),
@@ -433,6 +435,23 @@ fun BrowserScreen(
                             state.webView?.reload()
                         },
                     )
+                    if ((state.currentUrl.ifBlank { request.url }).startsWith("https://")) {
+                        DropdownMenuItem(
+                            text = { Text(stringResource(R.string.browser_menu_save_login)) },
+                            leadingIcon = { Icon(Icons.Filled.Lock, contentDescription = null) },
+                            onClick = {
+                                menuOpen = false
+                                captureFormLogin(
+                                    webView = state.webView,
+                                    pageUrl = state.currentUrl.ifBlank { request.url },
+                                    onFound = { pendingFormLogin = it },
+                                    onMissing = {
+                                        toast(context.getString(R.string.form_login_not_found))
+                                    },
+                                )
+                            },
+                        )
+                    }
                     DropdownMenuItem(
                         text = { Text(stringResource(R.string.browser_menu_desktop)) },
                         leadingIcon = { Icon(Icons.Filled.DesktopWindows, contentDescription = null) },
@@ -615,6 +634,73 @@ fun BrowserScreen(
             },
             dismissButton = {
                 TextButton(onClick = { confirmChangedCertificate = false }) {
+                    Text(stringResource(R.string.action_cancel))
+                }
+            },
+        )
+    }
+
+    pendingFormLogin?.let { target ->
+        val host = runCatching { Uri.parse(target.url).host }.getOrNull().orEmpty()
+        AlertDialog(
+            onDismissRequest = { pendingFormLogin = null },
+            title = { Text(stringResource(R.string.form_login_title)) },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Text(
+                        text = stringResource(R.string.form_login_site, host),
+                        style = MaterialTheme.typography.bodyMedium,
+                    )
+                    Text(
+                        text = stringResource(
+                            R.string.form_login_username,
+                            target.credentials.username.ifBlank { "—" },
+                        ),
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                    Text(
+                        text = stringResource(
+                            R.string.form_login_password_length,
+                            target.credentials.password.length,
+                        ),
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                    Text(
+                        text = stringResource(R.string.form_login_note),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        val uri = runCatching { Uri.parse(target.url) }.getOrNull()
+                        val formHost = uri?.host
+                        val saved = if (formHost != null) {
+                            val port = uri.port.takeIf { it > 0 } ?: 443
+                            container.credentials.saveFormLogin(
+                                host = formHost,
+                                port = port,
+                                username = target.credentials.username,
+                                password = target.credentials.password,
+                            )
+                        } else {
+                            false
+                        }
+                        pendingFormLogin = null
+                        toast(
+                            context.getString(
+                                if (saved) R.string.form_login_saved else R.string.form_login_save_failed,
+                            ),
+                        )
+                    },
+                ) {
+                    Text(stringResource(R.string.action_save))
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { pendingFormLogin = null }) {
                     Text(stringResource(R.string.action_cancel))
                 }
             },
@@ -933,12 +1019,17 @@ private fun WebViewHost(
                         ),
                     )
                 })
+                installCompatShims(this)
                 CookieManager.getInstance().setAcceptCookie(true)
                 CookieManager.getInstance().setAcceptThirdPartyCookies(this, false)
                 state.webView = this
                 val initialUrl = state.lastRequestedUrl.ifBlank { request.url }
                 state.lastRequestedUrl = initialUrl
-                loadUrl(initialUrl)
+                // Load only after the view has a real size. Loading from the
+                // factory (before the first layout) leaves Chromium's layout
+                // viewport at 0 high, which makes every `100vh`/`100dvh` unit
+                // resolve to 0 and collapses modern SPAs.
+                loadWhenSized(initialUrl)
             }
             webView
         },
@@ -1180,4 +1271,81 @@ private fun FullscreenVideoDialog(view: View, onClose: () -> Unit) {
             },
         )
     }
+}
+
+private data class FormLoginTarget(
+    val url: String,
+    val credentials: com.yukiorita.halfbrowser.core.FormCredentials,
+)
+
+/**
+ * Injects the compatibility shims before any page script runs. Without
+ * DOCUMENT_START_SCRIPT support the page simply stays unsupported rather than
+ * receiving a late, half-working polyfill.
+ */
+private fun installCompatShims(webView: WebView) {
+    if (!WebViewFeature.isFeatureSupported(WebViewFeature.DOCUMENT_START_SCRIPT)) return
+    runCatching {
+        WebViewCompat.addDocumentStartJavaScript(
+            webView,
+            com.yukiorita.halfbrowser.core.WebCompat.POLYFILL_JS,
+            setOf("*"),
+        )
+        WebViewCompat.addDocumentStartJavaScript(
+            webView,
+            com.yukiorita.halfbrowser.core.WebCompat.VIEWPORT_UNIT_FIX_JS,
+            setOf("*"),
+        )
+    }
+}
+
+/** Reads the visible login form and hands it to the confirmation dialog. */
+private fun captureFormLogin(
+    webView: WebView?,
+    pageUrl: String,
+    onFound: (FormLoginTarget) -> Unit,
+    onMissing: () -> Unit,
+) {
+    val view = webView ?: return
+    runCatching {
+        view.evaluateJavascript(com.yukiorita.halfbrowser.core.FormLogin.EXTRACT_JS) { raw ->
+            val credentials = com.yukiorita.halfbrowser.core.FormLogin.parseExtraction(raw)
+            if (credentials == null) {
+                onMissing()
+            } else {
+                onFound(FormLoginTarget(pageUrl, credentials))
+            }
+        }
+    }.onFailure { onMissing() }
+}
+
+/**
+ * Defers the first load until the WebView is measured. Chromium captures the
+ * viewport size when the first document is committed; a 0-height view at that
+ * moment poisons viewport units for the whole session.
+ */
+private fun WebView.loadWhenSized(url: String) {
+    if (width > 0 && height > 0) {
+        loadUrl(url)
+        return
+    }
+    val listener = object : android.view.View.OnLayoutChangeListener {
+        override fun onLayoutChange(
+            v: android.view.View?,
+            left: Int,
+            top: Int,
+            right: Int,
+            bottom: Int,
+            oldLeft: Int,
+            oldTop: Int,
+            oldRight: Int,
+            oldBottom: Int,
+        ) {
+            if (v != null && v.width > 0 && v.height > 0) {
+                v.removeOnLayoutChangeListener(this)
+                loadUrl(url)
+            }
+        }
+    }
+    addOnLayoutChangeListener(listener)
 }
