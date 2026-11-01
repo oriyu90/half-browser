@@ -306,6 +306,12 @@
     <string name="settings_form_autofill">保存したフォームのログインを自動入力</string>
     <string name="settings_form_autofill_desc">https のページで、空のユーザー名とパスワード欄に自動入力します。フォームの送信はしません。</string>
 
+    <string name="settings_fetch_icons">サイトのアイコンを自動取得</string>
+    <string name="settings_fetch_icons_desc">新しいブックマークにアイコンを指定していない場合、サイトの favicon を取得します。</string>
+    <string name="home_menu_refresh_icon">アイコンを再取得</string>
+    <string name="bookmark_icon_updated">アイコンを更新しました</string>
+    <string name="bookmark_icon_failed">アイコンを取得できませんでした</string>
+
     <!-- Accessibility -->
     <string name="cd_home">ホーム</string>
     <string name="cd_settings">設定</string>

@@ -2,6 +2,7 @@ package com.yukiorita.halfbrowser.data
 
 import android.util.Base64
 import com.yukiorita.halfbrowser.core.Bookmark
+import com.yukiorita.halfbrowser.core.FaviconRules
 import com.yukiorita.halfbrowser.core.SiteContent
 import com.yukiorita.halfbrowser.core.StoredCredential
 import com.yukiorita.halfbrowser.core.TrustPolicy
@@ -92,6 +93,79 @@ class SiteFetcher(
             fingerprint = SiteContent.fingerprint(response.body),
             snippet = SiteContent.snippet(response.body),
         )
+    }
+
+    /**
+     * Downloads a bookmark icon. Only http(s) is allowed, the response is capped
+     * at [FaviconRules.MAX_BYTES], and HTTPS follows the same pin rules as page
+     * checks. Credentials are never attached: an icon is public by nature.
+     */
+    fun fetchIcon(pageUrl: String): ByteArray? {
+        val page = runCatching { URL(pageUrl) }.getOrNull() ?: return null
+        val scheme = page.protocol.lowercase()
+        if (scheme != "http" && scheme != "https") return null
+        val port = if (page.port > 0) page.port else if (scheme == "https") 443 else 80
+        val pin = if (scheme == "https") trust.find(page.host, port) else null
+
+        for (candidate in FaviconRules.candidateUrls(pageUrl)) {
+            val url = runCatching { URL(candidate) }.getOrNull() ?: continue
+            val bytes = requestBytes(url, pin) ?: continue
+            if (FaviconRules.looksLikeImage(bytes)) return bytes
+        }
+
+        // Fall back to the markup: many sites declare a PNG icon elsewhere.
+        val html = requestBytes(page, pin)?.toString(Charsets.UTF_8) ?: return null
+        val href = FaviconRules.parseIconHref(html, pageUrl) ?: return null
+        val iconUrl = runCatching { URL(href) }.getOrNull() ?: return null
+        if (iconUrl.protocol != "http" && iconUrl.protocol != "https") return null
+        val iconPin = if (iconUrl.protocol == "https") {
+            val iconPort = if (iconUrl.port > 0) iconUrl.port else 443
+            trust.find(iconUrl.host, iconPort)
+        } else {
+            null
+        }
+        val bytes = requestBytes(iconUrl, iconPin) ?: return null
+        return bytes.takeIf { FaviconRules.looksLikeImage(it) }
+    }
+
+    private fun requestBytes(url: URL, pin: TrustedSite?): ByteArray? {
+        var connection: HttpURLConnection? = null
+        return try {
+            connection = (url.openConnection() as HttpURLConnection).apply {
+                connectTimeout = ICON_TIMEOUT_MS
+                readTimeout = ICON_TIMEOUT_MS
+                instanceFollowRedirects = true
+                requestMethod = "GET"
+                setRequestProperty("User-Agent", USER_AGENT)
+                setRequestProperty("Accept", "image/*,*/*;q=0.5")
+            }
+            if (connection is HttpsURLConnection && pin != null) {
+                connection.sslSocketFactory = sslContext(pin).socketFactory
+                connection.hostnameVerifier = hostnameVerifier(pin)
+            }
+            if (connection.responseCode !in 200..299) return null
+            val length = connection.contentLengthLong
+            if (length > FaviconRules.MAX_BYTES) return null
+            connection.inputStream.use { readIcon(it) }
+        } catch (throwable: Throwable) {
+            null
+        } finally {
+            runCatching { connection?.disconnect() }
+        }
+    }
+
+    private fun readIcon(input: java.io.InputStream): ByteArray {
+        val output = ByteArrayOutputStream()
+        val buffer = ByteArray(8 * 1024)
+        var total = 0
+        while (total < FaviconRules.MAX_BYTES) {
+            val read = input.read(buffer)
+            if (read <= 0) break
+            val take = minOf(read, FaviconRules.MAX_BYTES - total)
+            output.write(buffer, 0, take)
+            total += take
+        }
+        return output.toByteArray()
     }
 
     private fun request(
@@ -230,6 +304,7 @@ class SiteFetcher(
     )
 
     private companion object {
+        const val ICON_TIMEOUT_MS = 5_000
         const val USER_AGENT = "Mozilla/5.0 (Linux; Android 13) AppleWebKit/537.36 " +
             "(KHTML, like Gecko) Version/4.0 Chrome/120.0.0.0 Mobile Safari/537.36 " +
             "HalfBrowserWatch/1.1"

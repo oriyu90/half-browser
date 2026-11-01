@@ -36,6 +36,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -78,6 +79,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -113,6 +115,7 @@ import com.yukiorita.halfbrowser.core.NavigationRequest
 import com.yukiorita.halfbrowser.core.UrlNormalizer
 import com.yukiorita.halfbrowser.ui.components.BookmarkEditorDialog
 import com.yukiorita.halfbrowser.ui.settings.SettingsScreen
+import kotlinx.coroutines.launch
 import java.io.File
 import kotlin.math.roundToInt
 
@@ -137,6 +140,7 @@ fun BrowserScreen(
     val settings by container.settings.settings.collectAsStateWithLifecycle()
     val bookmarks by container.bookmarks.items.collectAsStateWithLifecycle()
     val state = remember { BrowserState() }
+    val scope = rememberCoroutineScope()
     val lifecycleOwner = LocalLifecycleOwner.current
 
     DisposableEffect(lifecycleOwner) {
@@ -372,7 +376,8 @@ fun BrowserScreen(
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .navigationBarsPadding(),
+                .navigationBarsPadding()
+                .imePadding(),
         ) {
             BrowserChromeBar(
                 title = title,
@@ -849,7 +854,10 @@ fun BrowserScreen(
                 if (existing != null && existing.id != target.bookmark?.id) {
                     toast(context.getString(R.string.bookmark_duplicate))
                 } else if (target.bookmark == null) {
-                    container.bookmarks.add(newTitle, newUrl, glyph)
+                    val added = container.bookmarks.add(newTitle, newUrl, glyph)
+                    if (glyph.isBlank() && container.settings.current().fetchBookmarkIcons) {
+                        scope.launch { container.favicons.refresh(added.id) }
+                    }
                     toast(context.getString(R.string.bookmark_saved))
                 } else {
                     container.bookmarks.update(
@@ -992,6 +1000,7 @@ private fun WebViewHost(
         modifier = Modifier.fillMaxSize(),
         factory = { ctx ->
             ensureWebViewDebugging()
+            val frame = android.widget.FrameLayout(ctx)
             val webView = WebView(ctx).apply {
                 // Do not set layoutParams: AndroidView owns measurement/placement.
                 // MATCH_PARENT here makes the native view span the whole screen and
@@ -1031,7 +1040,14 @@ private fun WebViewHost(
                 // resolve to 0 and collapses modern SPAs.
                 loadWhenSized(initialUrl)
             }
-            webView
+            frame.addView(
+                webView,
+                android.widget.FrameLayout.LayoutParams(
+                    android.view.ViewGroup.LayoutParams.MATCH_PARENT,
+                    android.view.ViewGroup.LayoutParams.MATCH_PARENT,
+                ),
+            )
+            frame
         },
         update = { },
     )
@@ -1289,11 +1305,6 @@ private fun installCompatShims(webView: WebView) {
         WebViewCompat.addDocumentStartJavaScript(
             webView,
             com.yukiorita.halfbrowser.core.WebCompat.POLYFILL_JS,
-            setOf("*"),
-        )
-        WebViewCompat.addDocumentStartJavaScript(
-            webView,
-            com.yukiorita.halfbrowser.core.WebCompat.VIEWPORT_UNIT_FIX_JS,
             setOf("*"),
         )
     }

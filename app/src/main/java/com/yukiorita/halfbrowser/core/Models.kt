@@ -15,6 +15,8 @@ data class Bookmark(
     val glyph: String = "",
     /** Deterministic palette index override; -1 means "derive from the URL". */
     val colorSeed: Int = -1,
+    /** File name of a downloaded favicon under `bookmark_icons/`; empty = none. */
+    val icon: String = "",
     val createdAt: Long = 0L,
     val updatedAt: Long = 0L,
 )
@@ -95,6 +97,8 @@ data class AppSettings(
     val accentTone: Float = 0.5f,
     /** Fill saved HTML form logins on https pages. Never submits automatically. */
     val formAutofillEnabled: Boolean = true,
+    /** Download a site icon when a bookmark is created without a custom glyph. */
+    val fetchBookmarkIcons: Boolean = true,
 ) {
     companion object {
         val DEFAULT = AppSettings()

@@ -28,7 +28,7 @@ Android 向けの小さな Chromium ブラウザです。ふつうのブラウ�
 | テーマ | ライト / ダーク / システム追従。ダークは **純黒の背景 + 白文字**。壁紙の色（Android 12+）を使うオプション。 |
 | アクセントカラー | 色相・彩度・明るさのスライダーと 8 色プリセットで UI のアクセントを調整。文字色はコントラスト比 4.5:1 以上を自動で確保します。 |
 | バックアップと復元 | ブックマーク・設定（アクセント含む）・信頼した証明書・サイト通知・保存したサインインを 1 つの JSON に書き出し、別の端末の Half-Browser で読み込み（統合 / 置き換え）。パスワードは任意で、選んだパスフレーズによる PBKDF2 + AES-GCM 暗号化のみ。 |
-| ホーム | ブックマークをアイコン付きタイルでグリッド表示。アイコンはオフライン生成のモノグラム（1〜2 文字、ユーザー編集可）。長押しで開く・編集・削除・共有・ホーム画面に追加。 |
+| ホーム | ブックマークをタイルでグリッド表示。追加時にサイトの favicon を自動取得（192px に正規化して端末内に保存、設定で OFF 可）。取得できない場合はオフライン生成のモノグラム（1〜2 文字、ユーザー編集可）。長押しで開く・編集・削除・共有・アイコン再取得・ホーム画面に追加。 |
 | 外部リンクの受け取り | `VIEW`（http/https）のブラウザ候補として表示され、他のアプリから選ぶと開けます。ブックマーク済み URL ならブックマーク名を表示する専用バーで開きます。**アプリ内に「既定のブラウザに設定」ボタンはありません**（OS 設定で選びます）。 |
 | ホーム画面ショートカット | ブックマークごとにピン留めショートカットを作成（ランチャーの確認つき）。動的ショートカットも同期。 |
 | 画面適応 | スマホ縦横・タブレット・折りたたみ。UI スケール 80〜140%、文字スケール 80〜150%、グリッド列数（自動 / 3 / 4 / 5 / 6 / 8）。 |
@@ -36,6 +36,7 @@ Android 向けの小さな Chromium ブラウザです。ふつうのブラウ�
 | 閲覧履歴 | 訪問したページを最大 500 件記録。ホームの時計アイコンから一覧・個別削除・全消去。同一ページの再訪は 30 分以内なら 1 件にまとめます。 |
 | フォームのログイン保存 | 自己署名 HTTPS を含む https ページのログイン欄を、メニューから確認して保存。次回は空欄にだけ自動入力し、送信はしません（設定で OFF 可）。 |
 | サイト通知 | ブックマークしたページをバックグラウンドで定期確認し、内容が変わったら通知します。監視 ON/OFF、間隔（15/30/60/180分）、Wi-Fi のみ、通知権限、最終確認/エラーを設定で管理。アプリを閉じていても WorkManager が実行します。 |
+| キーボード | 入力欄にフォーカスすると WebView をキーボードの上まで縮め、固定配置の入力バーが隠れないようにします。 |
 | WebView 互換 | 古い Android System WebView 向けに `Promise.withResolvers` / `AbortSignal.any` などの標準 API シムをページ読込前に注入。ビューポート高さが 0 になる環境では `vh` を実測 px に補正します。設定に WebView のバージョンを表示します。 |
 | プライバシー | 広告・解析・アカウントなし。JavaScript ブリッジなし。`file://` / `content://` アクセス無効。第三者の Cookie 無効。カメラ・マイク・位置情報はサイトごとに都度確認し、許可した訪問中のみ有効です。 |
 
@@ -47,7 +48,7 @@ Android 向けの小さな Chromium ブラウザです。ふつうのブラウ�
 
 ## インストール
 
-1. [Releases](https://github.com/oriyu90/half-browser/releases/latest) から `half-browser-1.3.0.apk` をダウンロードします。
+1. [Releases](https://github.com/oriyu90/half-browser/releases/latest) から `half-browser-1.4.0.apk` をダウンロードします。
 2. 端末で「提供元不明のアプリ」を許可してインストールします。
 3. 外部リンクを受け取りたい場合は、Android の設定 → アプリ → 既定のアプリ → ブラウザ で
    Half-Browser を選びます（アプリ内に既定ブラウザ設定ボタンはありません）。
@@ -130,7 +131,8 @@ an app-like bookmark home grid, per-bookmark launcher shortcuts, dark/light/syst
 (dark is true black with white text), a fine-grained accent-colour editor, one-file
 backup/restore of every custom item (passwords only as a passphrase-encrypted blob),
 adaptive layouts with UI/text scaling, browsing history, saved HTML form logins, WebView
-compatibility shims for older Android System WebView builds, and a full Japanese/English UI.
+compatibility shims for older Android System WebView builds, automatic site icons for bookmarks
+(with a monogram fallback), and a full Japanese/English UI.
 Search engines:
 Google, DuckDuckGo, Brave, Ecosia, Kagi and Mojeek.
 
@@ -138,6 +140,15 @@ Requires Android 8.0 (API 26) or later. MIT licensed. No ads, analytics, or acco
 See [docs/PLAN.md](docs/PLAN.md) and the [ADRs](docs/ADR/) for design decisions.
 
 ## 変更履歴
+
+### v1.4.0（2026-11-01）
+- **DSH の背景消失・上部 UI 欠落を修正**。原因は v1.3.0 の `vh` 書き換えシムでした。
+  WebView を `FrameLayout` 経由でホストするとビューポートが最初から正しく初期化される
+  ことが分かったため、シムを削除してページの CSS を無改変で描画します。
+- **キーボードで入力欄が隠れる問題を修正**。`imePadding()` で WebView をキーボード上まで縮めます。
+- **ブックマークのサイトアイコンを自動取得**。`apple-touch-icon` を優先し、ICO 内の PNG も抽出。
+  192px に正規化して端末内に保存し、タイルとホーム画面ショートカットに表示します。
+  長押しから「アイコンを再取得」も可能。設定で自動取得を OFF にできます。
 
 ### v1.3.0（2026-11-01）
 - **DSH などモダンな SPA が表示できない問題を修正**。Compose の `AndroidView` 経由で

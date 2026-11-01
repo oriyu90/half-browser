@@ -4,6 +4,7 @@ import android.content.Context
 import com.yukiorita.halfbrowser.core.NavigationRequest
 import com.yukiorita.halfbrowser.data.BookmarkRepository
 import com.yukiorita.halfbrowser.data.CredentialStore
+import com.yukiorita.halfbrowser.data.FaviconRepository
 import com.yukiorita.halfbrowser.data.HistoryRepository
 import com.yukiorita.halfbrowser.data.SettingsRepository
 import com.yukiorita.halfbrowser.data.SiteFetcher
@@ -33,6 +34,9 @@ class AppContainer(context: Context) {
     val siteWatch: SiteWatchRepository by lazy { SiteWatchRepository(appContext) }
     val history: HistoryRepository by lazy { HistoryRepository(appContext) }
     val siteFetcher: SiteFetcher by lazy { SiteFetcher(trust, credentials) }
+    val favicons: FaviconRepository by lazy {
+        FaviconRepository(appContext, bookmarks, siteFetcher, settings)
+    }
 
     private val _trustRevision = MutableStateFlow(0)
     /** Incremented when the user trusts/revokes a certificate in settings. */

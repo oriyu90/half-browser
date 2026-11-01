@@ -306,6 +306,12 @@
     <string name="settings_form_autofill">Fill saved form logins</string>
     <string name="settings_form_autofill_desc">Fills empty user name and password fields on https pages. Never submits the form.</string>
 
+    <string name="settings_fetch_icons">Fetch site icons automatically</string>
+    <string name="settings_fetch_icons_desc">When a new bookmark has no custom icon, download the site favicon.</string>
+    <string name="home_menu_refresh_icon">Refresh icon</string>
+    <string name="bookmark_icon_updated">Icon updated</string>
+    <string name="bookmark_icon_failed">Could not fetch an icon</string>
+
     <!-- Accessibility -->
     <string name="cd_home">Home</string>
     <string name="cd_settings">Settings</string>

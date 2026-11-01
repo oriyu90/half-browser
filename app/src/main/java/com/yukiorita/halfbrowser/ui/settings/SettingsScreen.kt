@@ -303,6 +303,14 @@ fun SettingsScreen(
                         ) {
                             Text(stringResource(R.string.settings_scale_reset))
                         }
+                        SwitchRow(
+                            title = stringResource(R.string.settings_fetch_icons),
+                            description = stringResource(R.string.settings_fetch_icons_desc),
+                            checked = settings.fetchBookmarkIcons,
+                            onCheckedChange = { value ->
+                                container.settings.update { it.copy(fetchBookmarkIcons = value) }
+                            },
+                        )
                         HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
                         Text(
                             text = stringResource(R.string.settings_grid_columns),

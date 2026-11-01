@@ -3,6 +3,7 @@ package com.yukiorita.halfbrowser.ui.home
 import android.content.Context
 import android.content.Intent
 import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
@@ -36,6 +37,7 @@ import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.NotificationsOff
 import androidx.compose.material.icons.filled.OpenInNew
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Share
@@ -67,6 +69,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
@@ -269,8 +273,12 @@ fun HomeScreen(
                             }
                         }
                         items(bookmarks, key = { it.id }) { bookmark ->
+                            val icon = remember(bookmark.icon) {
+                                container.favicons.load(bookmark)?.asImageBitmap()
+                            }
                             BookmarkTile(
                                 bookmark = bookmark,
+                                icon = icon,
                                 onClick = { onOpenRequest(bookmark.url, bookmark.id) },
                                 onLongClick = { menuTarget = bookmark },
                             )
@@ -315,6 +323,20 @@ fun HomeScreen(
                         onClick = {
                             menuTarget = null
                             editingTarget = EditingTarget(bookmark, bookmark.url)
+                        },
+                    )
+                    MenuRow(
+                        icon = { Icon(Icons.Filled.Refresh, contentDescription = null) },
+                        label = stringResource(R.string.home_menu_refresh_icon),
+                        onClick = {
+                            menuTarget = null
+                            scope.launch {
+                                val ok = container.favicons.refresh(bookmark.id, force = true)
+                                message(
+                                    if (ok) R.string.bookmark_icon_updated
+                                    else R.string.bookmark_icon_failed,
+                                )
+                            }
                         },
                     )
                     MenuRow(
@@ -389,6 +411,7 @@ fun HomeScreen(
             confirmButton = {
                 TextButton(
                     onClick = {
+                        container.favicons.deleteFor(bookmark)
                         container.bookmarks.delete(bookmark.id)
                         container.siteWatch.prune(
                             container.bookmarks.snapshot().map { it.id }.toSet(),
@@ -422,7 +445,10 @@ fun HomeScreen(
                 if (duplicate != null && duplicate.id != target.bookmark?.id) {
                     message(R.string.bookmark_duplicate)
                 } else if (target.bookmark == null) {
-                    container.bookmarks.add(title, url, glyph)
+                    val added = container.bookmarks.add(title, url, glyph)
+                    if (glyph.isBlank() && container.settings.current().fetchBookmarkIcons) {
+                        scope.launch { container.favicons.refresh(added.id) }
+                    }
                     message(R.string.bookmark_saved)
                 } else {
                     container.bookmarks.update(
@@ -512,10 +538,15 @@ private fun EmptyState(onAdd: () -> Unit) {
 @Composable
 private fun BookmarkTile(
     bookmark: Bookmark,
+    icon: androidx.compose.ui.graphics.ImageBitmap?,
     onClick: () -> Unit,
     onLongClick: () -> Unit,
 ) {
     val color = Color(BookmarkIcons.colorFor(bookmark.url, bookmark.colorSeed))
+    // Favicons are small (16-180px). Stretching one across the tile looks muddy,
+    // so a fetched icon sits on a white tile with breathing room; the monogram
+    // fallback keeps the full palette colour.
+    val tileColor = if (icon != null) Color.White else color
     Column(
         modifier = Modifier
             .clip(RoundedCornerShape(20.dp))
@@ -528,15 +559,26 @@ private fun BookmarkTile(
                 .fillMaxWidth()
                 .aspectRatio(1f)
                 .clip(RoundedCornerShape(22.dp))
-                .background(color),
+                .background(tileColor),
             contentAlignment = Alignment.Center,
         ) {
-            Text(
-                text = BookmarkIcons.glyphFor(bookmark.title, bookmark.url, bookmark.glyph),
-                color = Color.White,
-                fontSize = 32.sp,
-                fontWeight = FontWeight.Bold,
-            )
+            if (icon != null) {
+                Image(
+                    bitmap = icon,
+                    contentDescription = stringResource(R.string.cd_bookmark_icon),
+                    contentScale = ContentScale.Fit,
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(16.dp),
+                )
+            } else {
+                Text(
+                    text = BookmarkIcons.glyphFor(bookmark.title, bookmark.url, bookmark.glyph),
+                    color = Color.White,
+                    fontSize = 32.sp,
+                    fontWeight = FontWeight.Bold,
+                )
+            }
         }
         Spacer(Modifier.height(6.dp))
         Text(

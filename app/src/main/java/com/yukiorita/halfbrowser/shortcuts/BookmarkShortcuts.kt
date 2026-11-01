@@ -15,6 +15,7 @@ import com.yukiorita.halfbrowser.MainActivity
 import com.yukiorita.halfbrowser.core.Bookmark
 import com.yukiorita.halfbrowser.core.BookmarkIcons
 import com.yukiorita.halfbrowser.core.DeepLinks
+import com.yukiorita.halfbrowser.core.FaviconRules
 import kotlin.math.roundToInt
 
 /**
@@ -99,6 +100,18 @@ object BookmarkShortcuts {
             .build()
     }
 
+    /** The downloaded favicon, if one is stored for this bookmark. */
+    private fun downloadedIcon(context: Context, bookmark: Bookmark): Bitmap? {
+        if (bookmark.icon.isBlank()) return null
+        val file = java.io.File(
+            java.io.File(context.filesDir, FaviconRules.DIRECTORY),
+            bookmark.icon,
+        )
+        if (!file.isFile) return null
+        return runCatching { android.graphics.BitmapFactory.decodeFile(file.absolutePath) }
+            .getOrNull()
+    }
+
     /**
      * Draws the same monogram the home grid uses, so a shortcut is recognisable
      * at a glance. No network access and no favicon dependency.
@@ -106,6 +119,11 @@ object BookmarkShortcuts {
     fun monogramBitmap(context: Context, bookmark: Bookmark): Bitmap {
         val density = context.resources.displayMetrics.density
         val size = (108f * density).roundToInt().coerceIn(108, 432)
+        downloadedIcon(context, bookmark)?.let { icon ->
+            val scaled = Bitmap.createScaledBitmap(icon, size, size, true)
+            if (scaled !== icon) icon.recycle()
+            return scaled
+        }
         val bitmap = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888)
         val canvas = Canvas(bitmap)
         val color = BookmarkIcons.colorFor(bookmark.url, bookmark.colorSeed)
