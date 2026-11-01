@@ -99,6 +99,11 @@ data class AppSettings(
     val formAutofillEnabled: Boolean = true,
     /** Download a site icon when a bookmark is created without a custom glyph. */
     val fetchBookmarkIcons: Boolean = true,
+    /**
+     * Keep the open page running in the background so web notifications arrive
+     * immediately (a foreground service is shown while this is on).
+     */
+    val backgroundWebNotifications: Boolean = false,
 ) {
     companion object {
         val DEFAULT = AppSettings()

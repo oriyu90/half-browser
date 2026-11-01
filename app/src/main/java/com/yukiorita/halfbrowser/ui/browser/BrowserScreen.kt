@@ -15,6 +15,7 @@ import android.view.View
 import android.view.ViewGroup
 import android.view.WindowManager
 import android.widget.FrameLayout
+import android.os.Build
 import android.os.Environment
 import android.webkit.CookieManager
 import android.webkit.WebChromeClient
@@ -26,7 +27,9 @@ import android.widget.Toast
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -42,6 +45,9 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -52,6 +58,8 @@ import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.DesktopWindows
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.ErrorOutline
+import androidx.compose.material.icons.filled.Home
+import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.Language
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.MoreVert
@@ -66,7 +74,10 @@ import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.LinearProgressIndicator
+import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
@@ -87,10 +98,17 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.clipToBounds
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
@@ -112,6 +130,10 @@ import com.yukiorita.halfbrowser.BuildConfig
 import com.yukiorita.halfbrowser.R
 import com.yukiorita.halfbrowser.core.Bookmark
 import com.yukiorita.halfbrowser.core.NavigationRequest
+import com.yukiorita.halfbrowser.core.SitePermissionKind
+import com.yukiorita.halfbrowser.core.SitePermissions
+import com.yukiorita.halfbrowser.notifications.WebNotificationBridge
+import com.yukiorita.halfbrowser.service.KeepAliveService
 import com.yukiorita.halfbrowser.core.UrlNormalizer
 import com.yukiorita.halfbrowser.ui.components.BookmarkEditorDialog
 import com.yukiorita.halfbrowser.ui.settings.SettingsScreen
@@ -126,6 +148,7 @@ import kotlin.math.roundToInt
  * title) in the middle and a folded overflow menu on the right, as specified for
  * pages opened from a bookmark.
  */
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun BrowserScreen(
     request: NavigationRequest.Open,
@@ -149,7 +172,11 @@ fun BrowserScreen(
                 Lifecycle.Event.ON_STOP -> {
                     // Do not burn CPU/GPU on a page nobody is looking at, and let
                     // the WebView drop caches while the app is in the background.
-                    state.webView?.pauseTimers()
+                    // With background notification delivery on, the page has to
+                    // keep running: freezing it would silence the site.
+                    if (!container.settings.current().backgroundWebNotifications) {
+                        state.webView?.pauseTimers()
+                    }
                     @Suppress("DEPRECATION")
                     state.webView?.freeMemory()
                 }
@@ -170,6 +197,8 @@ fun BrowserScreen(
     var pendingGeoRequest by remember { mutableStateOf<GeoPermissionRequest?>(null) }
     var pendingCameraRequest by remember { mutableStateOf<FileChooserRequest?>(null) }
     var pendingFormLogin by remember { mutableStateOf<FormLoginTarget?>(null) }
+    var bookmarksOpen by remember { mutableStateOf(false) }
+    var pendingNotificationPrompt by remember { mutableStateOf<NotifyPrompt?>(null) }
 
     val filePickerLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.StartActivityForResult(),
@@ -189,6 +218,10 @@ fun BrowserScreen(
         }
         request.deliver(uris)
     }
+
+    val notificationPermissionLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission(),
+    ) { /* The site keeps its grant; the OS answer only gates delivery. */ }
 
     val webPermissionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions(),
@@ -297,6 +330,13 @@ fun BrowserScreen(
         }
     }
 
+    /** Stores the user's answer so the site is not asked again until revoked. */
+    fun rememberWebPermission(request: WebPermissionRequest, allowed: Boolean) {
+        request.kinds.forEach { kind ->
+            container.sitePermissions.record(request.origin, kind, allowed)
+        }
+    }
+
     fun requestLocationPermission(request: GeoPermissionRequest) {
         val granted = ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) ==
             PackageManager.PERMISSION_GRANTED ||
@@ -333,6 +373,8 @@ fun BrowserScreen(
     }
 
     val activeBookmark = request.bookmarkId?.let { id -> bookmarks.firstOrNull { it.id == id } }
+    // A page opened from a bookmark gets the compact, single-line chrome bar.
+    val compactChrome = activeBookmark != null
     val matchedBookmark = remember(bookmarks, state.currentUrl) {
         val current = UrlNormalizer.canonicalForCompare(state.currentUrl) ?: return@remember null
         bookmarks.firstOrNull { UrlNormalizer.canonicalForCompare(it.url) == current }
@@ -363,6 +405,16 @@ fun BrowserScreen(
         }
     }
 
+    // The keep-alive service only exists while a browser screen is on screen and
+    // the user asked for immediate web notifications.
+    LaunchedEffect(settings.backgroundWebNotifications) {
+        if (settings.backgroundWebNotifications) {
+            KeepAliveService.start(context)
+        } else {
+            KeepAliveService.stop(context)
+        }
+    }
+
     LaunchedEffect(request.url) {
         val webView = state.webView ?: return@LaunchedEffect
         if (state.lastRequestedUrl != request.url) {
@@ -384,11 +436,17 @@ fun BrowserScreen(
                 subtitle = host,
                 secure = secure,
                 bookmarked = matchedBookmark != null,
+                compact = compactChrome,
                 loading = state.loading,
                 progress = state.progress,
                 menuOpen = menuOpen,
                 onMenuOpenChange = { menuOpen = it },
                 onHome = onHome,
+                onReload = {
+                    state.error = null
+                    if (state.webView == null) state.generation += 1 else state.webView?.reload()
+                },
+                onBookmarks = { bookmarksOpen = true },
                 menuContent = {
                     val currentBookmark = activeBookmark ?: matchedBookmark
                     DropdownMenuItem(
@@ -510,9 +568,13 @@ fun BrowserScreen(
                     container = container,
                     context = context,
                     textZoomPercent = (settings.fontScale * 100).roundToInt(),
+                    pageZoom = settings.uiScale,
                     darkTheme = darkTheme,
                     toast = toast,
                     onSettingsRequested = { settingsOpen = true },
+                    onNotificationPrompt = { origin, decide ->
+                        pendingNotificationPrompt = NotifyPrompt(origin, decide)
+                    },
                 )
                 state.error?.let { error ->
                     BrowserErrorPane(
@@ -539,6 +601,165 @@ fun BrowserScreen(
                 SettingsScreen(container = container, onBack = { settingsOpen = false })
             }
         }
+    }
+
+    if (bookmarksOpen) {
+        val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+        ModalBottomSheet(
+            onDismissRequest = { bookmarksOpen = false },
+            sheetState = sheetState,
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp)
+                    .padding(bottom = 24.dp),
+                verticalArrangement = Arrangement.spacedBy(4.dp),
+            ) {
+                Text(
+                    text = stringResource(R.string.bookmarks_sheet_title),
+                    style = MaterialTheme.typography.titleMedium,
+                    modifier = Modifier.padding(bottom = 6.dp),
+                )
+                if (bookmarks.isEmpty()) {
+                    Text(
+                        text = stringResource(R.string.bookmarks_sheet_empty),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                } else {
+                    LazyColumn(modifier = Modifier.fillMaxWidth()) {
+                        items(bookmarks, key = { it.id }) { bookmark ->
+                            val icon = remember(bookmark.icon) {
+                                container.favicons.load(bookmark)?.asImageBitmap()
+                            }
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clip(RoundedCornerShape(12.dp))
+                                    .clickable {
+                                        bookmarksOpen = false
+                                        container.requestOpen(bookmark.url, bookmark.id)
+                                    }
+                                    .padding(vertical = 8.dp, horizontal = 6.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(34.dp)
+                                        .clip(RoundedCornerShape(10.dp))
+                                        .background(
+                                            if (icon != null) {
+                                                Color.White
+                                            } else {
+                                                Color(
+                                                    com.yukiorita.halfbrowser.core.BookmarkIcons
+                                                        .colorFor(bookmark.url, bookmark.colorSeed),
+                                                )
+                                            },
+                                        ),
+                                    contentAlignment = Alignment.Center,
+                                ) {
+                                    if (icon != null) {
+                                        Image(
+                                            bitmap = icon,
+                                            contentDescription = null,
+                                            contentScale = ContentScale.Fit,
+                                            modifier = Modifier
+                                                .fillMaxSize()
+                                                .padding(4.dp),
+                                        )
+                                    } else {
+                                        Text(
+                                            text = com.yukiorita.halfbrowser.core.BookmarkIcons
+                                                .glyphFor(bookmark.title, bookmark.url, bookmark.glyph),
+                                            color = Color.White,
+                                            fontSize = 15.sp,
+                                        )
+                                    }
+                                }
+                                Spacer(Modifier.width(12.dp))
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(
+                                        text = com.yukiorita.halfbrowser.core.BookmarkIcons
+                                            .normalizedTitleOrFallback(bookmark.title, bookmark.url),
+                                        style = MaterialTheme.typography.bodyLarge,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis,
+                                    )
+                                    Text(
+                                        text = SitePermissions.hostOf(
+                                            SitePermissions.originOf(bookmark.url).orEmpty(),
+                                        ),
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis,
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    pendingNotificationPrompt?.let { prompt ->
+        AlertDialog(
+            onDismissRequest = {
+                prompt.decide(false)
+                pendingNotificationPrompt = null
+            },
+            properties = DialogProperties(dismissOnClickOutside = false),
+            title = { Text(stringResource(R.string.notify_prompt_title)) },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Text(
+                        stringResource(
+                            R.string.notify_prompt_message,
+                            SitePermissions.hostOf(prompt.origin),
+                        ),
+                    )
+                    Text(
+                        text = stringResource(R.string.notify_prompt_note),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        prompt.decide(true)
+                        pendingNotificationPrompt = null
+                        WebNotificationBridge.ensureChannel(context)
+                        // Android still decides whether a notification may be
+                        // shown at all; ask once, without blocking the page.
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+                            ContextCompat.checkSelfPermission(
+                                context,
+                                Manifest.permission.POST_NOTIFICATIONS,
+                            ) != PackageManager.PERMISSION_GRANTED
+                        ) {
+                            runCatching {
+                                notificationPermissionLauncher.launch(
+                                    Manifest.permission.POST_NOTIFICATIONS,
+                                )
+                            }
+                        }
+                    },
+                ) { Text(stringResource(R.string.web_permission_allow)) }
+            },
+            dismissButton = {
+                TextButton(
+                    onClick = {
+                        prompt.decide(false)
+                        pendingNotificationPrompt = null
+                    },
+                ) { Text(stringResource(R.string.web_permission_deny)) }
+            },
+        )
     }
 
     state.ssl?.let { challenge ->
@@ -766,6 +987,7 @@ fun BrowserScreen(
         }
         AlertDialog(
             onDismissRequest = {
+                rememberWebPermission(request, false)
                 request.deny()
                 state.webPermission = null
             },
@@ -787,6 +1009,7 @@ fun BrowserScreen(
                 TextButton(
                     onClick = {
                         state.webPermission = null
+                        rememberWebPermission(request, true)
                         requestAndroidWebPermissions(request)
                     },
                 ) { Text(stringResource(R.string.web_permission_allow)) }
@@ -795,6 +1018,7 @@ fun BrowserScreen(
                 TextButton(
                     onClick = {
                         state.webPermission = null
+                        rememberWebPermission(request, false)
                         request.deny()
                     },
                 ) { Text(stringResource(R.string.web_permission_deny)) }
@@ -805,6 +1029,11 @@ fun BrowserScreen(
     state.geoPermission?.let { request ->
         AlertDialog(
             onDismissRequest = {
+                container.sitePermissions.record(
+                    request.origin,
+                    SitePermissionKind.LOCATION,
+                    false,
+                )
                 request.resolve(false)
                 state.geoPermission = null
             },
@@ -822,6 +1051,11 @@ fun BrowserScreen(
                 TextButton(
                     onClick = {
                         state.geoPermission = null
+                        container.sitePermissions.record(
+                            request.origin,
+                            SitePermissionKind.LOCATION,
+                            true,
+                        )
                         requestLocationPermission(request)
                     },
                 ) { Text(stringResource(R.string.geo_permission_allow)) }
@@ -830,6 +1064,11 @@ fun BrowserScreen(
                 TextButton(
                     onClick = {
                         state.geoPermission = null
+                        container.sitePermissions.record(
+                            request.origin,
+                            SitePermissionKind.LOCATION,
+                            false,
+                        )
                         request.resolve(false)
                     },
                 ) { Text(stringResource(R.string.geo_permission_deny)) }
@@ -889,86 +1128,120 @@ fun BrowserScreen(
 
 private data class EditorTarget(val bookmark: Bookmark?, val url: String)
 
+/** A pending "this site wants to send notifications" question. */
+private class NotifyPrompt(
+    val origin: String,
+    private val onDecide: (Boolean) -> Unit,
+) {
+    private var settled = false
+
+    fun decide(allowed: Boolean) {
+        if (settled) return
+        settled = true
+        onDecide(allowed)
+    }
+}
+
 @Composable
 private fun BrowserChromeBar(
     title: String,
     subtitle: String,
     secure: Boolean,
     bookmarked: Boolean,
+    compact: Boolean,
     loading: Boolean,
     progress: Int,
     menuOpen: Boolean,
     onMenuOpenChange: (Boolean) -> Unit,
     onHome: () -> Unit,
+    onReload: () -> Unit,
+    onBookmarks: () -> Unit,
     menuContent: @Composable () -> Unit,
 ) {
     Surface(color = MaterialTheme.colorScheme.surface, tonalElevation = 3.dp) {
         Column(modifier = Modifier.statusBarsPadding()) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .heightIn(min = 56.dp)
-                    .padding(horizontal = 4.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                IconButton(onClick = onHome) {
-                    Icon(
-                        Icons.AutoMirrored.Filled.ArrowBack,
-                        contentDescription = stringResource(R.string.browser_back_home),
-                    )
-                }
-                Column(
+            if (compact) {
+                CompactChromeRow(
+                    title = title,
+                    subtitle = subtitle,
+                    bookmarked = bookmarked,
+                    menuOpen = menuOpen,
+                    onMenuOpenChange = onMenuOpenChange,
+                    onHome = onHome,
+                    onReload = onReload,
+                    onBookmarks = onBookmarks,
+                    menuContent = menuContent,
+                )
+            } else {
+                Row(
                     modifier = Modifier
-                        .weight(1f)
+                        .fillMaxWidth()
+                        .heightIn(min = 56.dp)
                         .padding(horizontal = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    Text(
-                        text = title,
-                        style = MaterialTheme.typography.titleMedium,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                    Row(verticalAlignment = Alignment.CenterVertically) {
+                    IconButton(onClick = onHome) {
                         Icon(
-                            imageVector = if (secure) Icons.Filled.Lock else Icons.Filled.Language,
-                            contentDescription = stringResource(R.string.browser_security),
-                            modifier = Modifier.size(12.dp),
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                            Icons.AutoMirrored.Filled.ArrowBack,
+                            contentDescription = stringResource(R.string.browser_back_home),
                         )
-                        Spacer(Modifier.width(4.dp))
+                    }
+                    Column(
+                        modifier = Modifier
+                            .weight(1f)
+                            .padding(horizontal = 4.dp),
+                    ) {
                         Text(
-                            text = subtitle,
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            text = title,
+                            style = MaterialTheme.typography.titleMedium,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis,
                         )
-                        if (bookmarked) {
-                            Spacer(Modifier.width(6.dp))
-                            Text(
-                                text = "★",
-                                color = MaterialTheme.colorScheme.primary,
-                                fontSize = 11.sp,
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(
+                                imageVector = if (secure) Icons.Filled.Lock else Icons.Filled.Language,
+                                contentDescription = stringResource(R.string.browser_security),
+                                modifier = Modifier.size(12.dp),
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
+                            Spacer(Modifier.width(4.dp))
+                            Text(
+                                text = subtitle,
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                            if (bookmarked) {
+                                Spacer(Modifier.width(6.dp))
+                                Text(
+                                    text = "★",
+                                    color = MaterialTheme.colorScheme.primary,
+                                    fontSize = 11.sp,
+                                )
+                            }
                         }
                     }
-                }
-                Box {
-                    IconButton(onClick = { onMenuOpenChange(true) }) {
-                        Icon(
-                            Icons.Filled.MoreVert,
-                            contentDescription = stringResource(R.string.browser_more),
-                        )
-                    }
-                    DropdownMenu(expanded = menuOpen, onDismissRequest = { onMenuOpenChange(false) }) {
-                        menuContent()
+                    Box {
+                        IconButton(onClick = { onMenuOpenChange(true) }) {
+                            Icon(
+                                Icons.Filled.MoreVert,
+                                contentDescription = stringResource(R.string.browser_more),
+                            )
+                        }
+                        DropdownMenu(
+                            expanded = menuOpen,
+                            onDismissRequest = { onMenuOpenChange(false) },
+                        ) {
+                            menuContent()
+                        }
                     }
                 }
             }
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(3.dp),
+                    .height(2.dp),
             ) {
                 if (loading && progress in 1..99) {
                     LinearProgressIndicator(
@@ -981,6 +1254,93 @@ private fun BrowserChromeBar(
     }
 }
 
+/**
+ * The bar used for a page opened from a bookmark: one 44dp line with the home
+ * and reload actions on the left, "title · host" in the middle and the bookmark
+ * switcher plus the overflow menu on the right. The two-line layout was taller
+ * than the content it described on a phone.
+ */
+@Composable
+private fun CompactChromeRow(
+    title: String,
+    subtitle: String,
+    bookmarked: Boolean,
+    menuOpen: Boolean,
+    onMenuOpenChange: (Boolean) -> Unit,
+    onHome: () -> Unit,
+    onReload: () -> Unit,
+    onBookmarks: () -> Unit,
+    menuContent: @Composable () -> Unit,
+) {
+    val hostColor = MaterialTheme.colorScheme.onSurfaceVariant
+    val label = remember(title, subtitle, bookmarked, hostColor) {
+        buildAnnotatedString {
+            append(title)
+            if (subtitle.isNotBlank() && !title.contains(subtitle)) {
+                withStyle(SpanStyle(color = hostColor, fontSize = 11.sp)) {
+                    append("  ·  ")
+                    append(subtitle)
+                }
+            }
+            if (bookmarked) append("  ★")
+        }
+    }
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .heightIn(min = 44.dp)
+            .padding(horizontal = 2.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        IconButton(onClick = onHome, modifier = Modifier.size(40.dp)) {
+            Icon(
+                Icons.Filled.Home,
+                contentDescription = stringResource(R.string.browser_open_home),
+                modifier = Modifier.size(20.dp),
+            )
+        }
+        IconButton(onClick = onReload, modifier = Modifier.size(40.dp)) {
+            Icon(
+                Icons.Filled.Refresh,
+                contentDescription = stringResource(R.string.browser_reload),
+                modifier = Modifier.size(20.dp),
+            )
+        }
+        Text(
+            text = label,
+            style = MaterialTheme.typography.titleSmall,
+            color = MaterialTheme.colorScheme.onSurface,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier
+                .weight(1f)
+                .padding(horizontal = 6.dp),
+        )
+        IconButton(onClick = onBookmarks, modifier = Modifier.size(40.dp)) {
+            Icon(
+                Icons.Filled.Menu,
+                contentDescription = stringResource(R.string.browser_bookmarks),
+                modifier = Modifier.size(20.dp),
+            )
+        }
+        Box {
+            IconButton(
+                onClick = { onMenuOpenChange(true) },
+                modifier = Modifier.size(40.dp),
+            ) {
+                Icon(
+                    Icons.Filled.MoreVert,
+                    contentDescription = stringResource(R.string.browser_more),
+                    modifier = Modifier.size(20.dp),
+                )
+            }
+            DropdownMenu(expanded = menuOpen, onDismissRequest = { onMenuOpenChange(false) }) {
+                menuContent()
+            }
+        }
+    }
+}
+
 @Composable
 private fun WebViewHost(
     request: NavigationRequest.Open,
@@ -988,9 +1348,11 @@ private fun WebViewHost(
     container: AppContainer,
     context: Context,
     textZoomPercent: Int,
+    pageZoom: Float,
     darkTheme: Boolean,
     toast: (String) -> Unit,
     onSettingsRequested: () -> Unit,
+    onNotificationPrompt: (String, (Boolean) -> Unit) -> Unit,
 ) {
     // Page surface stays white, like desktop browsers. Painting it with the app's
     // dark surface made ordinary pages (black text, no background) unreadable.
@@ -1007,6 +1369,8 @@ private fun WebViewHost(
                 // cover the Compose chrome bar.
                 setBackgroundColor(backgroundColor)
                 configureWebView(this, textZoomPercent, darkTheme)
+                state.pageZoom = pageZoom
+                applyPageZoom(this, state)
                 state.defaultUserAgent = this.settings.userAgentString.orEmpty()
                 webViewClient = HalfBrowserWebViewClient(
                     context = context,
@@ -1019,7 +1383,7 @@ private fun WebViewHost(
                     },
                     showToast = toast,
                 )
-                webChromeClient = HalfBrowserChromeClient(state)
+                webChromeClient = HalfBrowserChromeClient(state, container)
                 setDownloadListener(DownloadListener { url, _, contentDisposition, mimeType, _ ->
                     val started = enqueueDownload(context, url, contentDisposition, mimeType)
                     toast(
@@ -1028,7 +1392,13 @@ private fun WebViewHost(
                         ),
                     )
                 })
-                installCompatShims(this)
+                installDocumentScripts(this)
+                WebNotificationBridge(
+                    context = context,
+                    permissions = container.sitePermissions,
+                    currentUrl = { state.currentUrl },
+                    askUser = onNotificationPrompt,
+                ).register(this)
                 CookieManager.getInstance().setAcceptCookie(true)
                 CookieManager.getInstance().setAcceptThirdPartyCookies(this, false)
                 state.webView = this
@@ -1049,7 +1419,10 @@ private fun WebViewHost(
             )
             frame
         },
-        update = { },
+        update = { _ ->
+            state.pageZoom = pageZoom
+            state.webView?.let { applyPageZoom(it, state) }
+        },
     )
     }
 }
@@ -1154,6 +1527,35 @@ private fun configureWebView(webView: WebView, textZoomPercent: Int, darkTheme: 
             WebSettingsCompat.setAlgorithmicDarkeningAllowed(s, darkTheme)
         }
     }
+}
+
+/**
+ * Applies the UI scale to the page itself.
+ *
+ * Measured on Android System WebView 113 (API 34):
+ *  - `setInitialScale()` is ignored as soon as the page declares
+ *    `<meta name="viewport" content="width=device-width, initial-scale=1">`
+ *    (DSH does), and rewriting that meta from script has no effect either.
+ *  - CSS `zoom` reflows the page but shifts `position: fixed` elements, which is
+ *    the same class of breakage the v1.3 viewport shim caused.
+ *  - the WebView page scale (what pinch-zoom drives) magnifies everything
+ *    without touching the document, so fixed headers and `100vh` keep their
+ *    geometry.
+ *
+ * Page scale resets on every navigation, so the client re-applies it after each
+ * load (`appliedZoom` is reset there). Re-applying only on an actual change
+ * avoids a visible reset-then-zoom flicker on every recomposition.
+ */
+internal fun applyPageZoom(webView: WebView, state: BrowserState) {
+    val target = state.pageZoom.coerceIn(0.5f, 2f)
+    if (state.zoomAlreadyApplied(target)) return
+    runCatching {
+        val current = webView.scale
+        // zoomBy() is relative, so normalise before applying a new factor.
+        if (current > 0f && current != 1f) webView.zoomBy(1f / current)
+        if (target != 1f) webView.zoomBy(target)
+    }
+    state.markZoomApplied(target)
 }
 
 private var debuggingConfigured = false
@@ -1299,14 +1701,17 @@ private data class FormLoginTarget(
  * DOCUMENT_START_SCRIPT support the page simply stays unsupported rather than
  * receiving a late, half-working polyfill.
  */
-private fun installCompatShims(webView: WebView) {
+private fun installDocumentScripts(webView: WebView) {
     if (!WebViewFeature.isFeatureSupported(WebViewFeature.DOCUMENT_START_SCRIPT)) return
-    runCatching {
-        WebViewCompat.addDocumentStartJavaScript(
-            webView,
-            com.yukiorita.halfbrowser.core.WebCompat.POLYFILL_JS,
-            setOf("*"),
-        )
+    // Order matters only in that each script must run before page code; they are
+    // independent of one another (compatibility polyfills, keyboard modifier
+    // guard, notification bridge).
+    listOf(
+        com.yukiorita.halfbrowser.core.WebCompat.POLYFILL_JS,
+        com.yukiorita.halfbrowser.core.KeyboardGuard.JS,
+        com.yukiorita.halfbrowser.core.WebNotify.JS,
+    ).forEach { script ->
+        runCatching { WebViewCompat.addDocumentStartJavaScript(webView, script, setOf("*")) }
     }
 }
 

@@ -90,4 +90,24 @@ object Codecs {
             .filter { it.host.isNotBlank() && it.fingerprintSha256.isNotBlank() }
             .distinctBy { it.host.lowercase() + ":" + it.port }
     }
+
+    fun encodeSitePermissions(items: List<SitePermissionGrant>): String =
+        runCatching {
+            json.encodeToString(
+                SitePermissionList.serializer(),
+                SitePermissionList(items = items),
+            )
+        }.getOrDefault("")
+
+    fun decodeSitePermissions(raw: String?): List<SitePermissionGrant> {
+        if (raw.isNullOrBlank()) return emptyList()
+        val list = runCatching { json.decodeFromString(SitePermissionList.serializer(), raw) }
+            .getOrNull() ?: return emptyList()
+        return list.items
+            .filter {
+                SitePermissions.isWebOrigin(it.origin) &&
+                    SitePermissionKind.fromKey(it.kind) != null
+            }
+            .distinctBy { it.origin + "|" + it.kind }
+    }
 }

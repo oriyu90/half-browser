@@ -14,6 +14,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import com.yukiorita.halfbrowser.core.SitePermissionKind
 import com.yukiorita.halfbrowser.core.TrustPolicy
 import java.io.ByteArrayInputStream
 import java.security.cert.CertificateFactory
@@ -46,6 +47,23 @@ class BrowserState {
 
     /** Bumped when the renderer process dies so Compose builds a fresh WebView. */
     var generation by mutableIntStateOf(0)
+
+    /** Page zoom requested by the settings (1.0 = 100%). */
+    var pageZoom: Float = 1f
+
+    /** Zoom that has already been pushed into the WebView. */
+    private var appliedZoom: Float = 1f
+
+    internal fun zoomAlreadyApplied(target: Float): Boolean = appliedZoom == target
+
+    internal fun markZoomApplied(target: Float) {
+        appliedZoom = target
+    }
+
+    /** Called after a navigation, where Chromium resets the page scale to 100%. */
+    internal fun resetAppliedZoom() {
+        appliedZoom = 1f
+    }
 }
 
 enum class ErrorKind { NETWORK, AUTH, CERT }
@@ -77,6 +95,10 @@ class WebPermissionRequest(
 
     val wantsMicrophone: Boolean
         get() = resources.contains(PermissionRequest.RESOURCE_AUDIO_CAPTURE)
+
+    /** Permission kinds this request maps onto, for the per-site decision store. */
+    val kinds: List<SitePermissionKind>
+        get() = resources.mapNotNull { SitePermissionKind.fromWebResource(it) }
 }
 
 class GeoPermissionRequest(

@@ -8,6 +8,7 @@ import com.yukiorita.halfbrowser.data.FaviconRepository
 import com.yukiorita.halfbrowser.data.HistoryRepository
 import com.yukiorita.halfbrowser.data.SettingsRepository
 import com.yukiorita.halfbrowser.data.SiteFetcher
+import com.yukiorita.halfbrowser.data.SitePermissionRepository
 import com.yukiorita.halfbrowser.data.SiteWatchRepository
 import com.yukiorita.halfbrowser.data.TrustRepository
 import kotlinx.coroutines.channels.Channel
@@ -32,6 +33,7 @@ class AppContainer(context: Context) {
     val trust: TrustRepository by lazy { TrustRepository(appContext) }
     val credentials: CredentialStore by lazy { CredentialStore(appContext) }
     val siteWatch: SiteWatchRepository by lazy { SiteWatchRepository(appContext) }
+    val sitePermissions: SitePermissionRepository by lazy { SitePermissionRepository(appContext) }
     val history: HistoryRepository by lazy { HistoryRepository(appContext) }
     val siteFetcher: SiteFetcher by lazy { SiteFetcher(trust, credentials) }
     val favicons: FaviconRepository by lazy {

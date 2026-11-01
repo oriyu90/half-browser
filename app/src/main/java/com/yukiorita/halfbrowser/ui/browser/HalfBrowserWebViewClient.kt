@@ -20,6 +20,8 @@ import android.webkit.WebView
 import android.webkit.WebViewClient
 import androidx.webkit.WebViewCompat
 import com.yukiorita.halfbrowser.AppContainer
+import com.yukiorita.halfbrowser.core.SitePermissionKind
+import com.yukiorita.halfbrowser.core.SitePermissions
 import com.yukiorita.halfbrowser.core.TrustDecision
 import com.yukiorita.halfbrowser.core.TrustPolicy
 import com.yukiorita.halfbrowser.core.AuthAttemptTracker
@@ -69,6 +71,14 @@ internal class HalfBrowserWebViewClient(
         state.progress = 100
         state.currentUrl = url ?: state.currentUrl
         state.canGoBack = view?.canGoBack() == true
+        // Chromium resets the page scale for each document, so forget the cached
+        // value and restore the user's zoom once the new page has been laid out.
+        state.resetAppliedZoom()
+        state.webView?.let { webView ->
+            webView.postDelayed({
+                runCatching { applyPageZoom(webView, state) }
+            }, 150)
+        }
         val pendingAuth = state.pendingAuthErrorUrl
         if (pendingAuth != null) {
             state.pendingAuthErrorUrl = null
@@ -373,6 +383,7 @@ private fun sanitizeAuthLabel(value: String, maxLength: Int): String =
 
 internal class HalfBrowserChromeClient(
     private val state: BrowserState,
+    private val container: AppContainer,
 ) : WebChromeClient() {
 
     override fun onProgressChanged(view: WebView?, newProgress: Int) {
@@ -406,9 +417,24 @@ internal class HalfBrowserChromeClient(
             request.deny()
             return
         }
+        val origin = SitePermissions.originOf(request.origin?.toString())
+        // A remembered decision answers immediately; the store is the only way a
+        // site stops prompting, and the user can revoke it in settings.
+        if (origin != null) {
+            val kinds = supported.mapNotNull { SitePermissionKind.fromWebResource(it) }
+            val decisions = kinds.map { container.sitePermissions.decision(origin, it) }
+            if (decisions.isNotEmpty() && decisions.all { it != null }) {
+                if (decisions.all { it == true }) {
+                    runCatching { request.grant(supported.toTypedArray()) }
+                } else {
+                    runCatching { request.deny() }
+                }
+                return
+            }
+        }
         state.webPermission?.deny()
         state.webPermission = WebPermissionRequest(
-            origin = request.origin?.toString().orEmpty(),
+            origin = origin ?: request.origin?.toString().orEmpty(),
             resources = supported.toTypedArray(),
             request = request,
         )
@@ -419,8 +445,19 @@ internal class HalfBrowserChromeClient(
         callback: GeolocationPermissions.Callback?,
     ) {
         if (callback == null) return
+        val normalized = SitePermissions.originOf(origin)
+        if (normalized != null) {
+            val decision = container.sitePermissions.decision(
+                normalized,
+                SitePermissionKind.LOCATION,
+            )
+            if (decision != null) {
+                runCatching { callback.invoke(origin, decision, false) }
+                return
+            }
+        }
         state.geoPermission?.resolve(false)
-        state.geoPermission = GeoPermissionRequest(origin.orEmpty(), callback)
+        state.geoPermission = GeoPermissionRequest(normalized ?: origin.orEmpty(), callback)
     }
 
     override fun onShowCustomView(view: android.view.View?, callback: CustomViewCallback?) {

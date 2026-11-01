@@ -3,6 +3,7 @@ package com.yukiorita.halfbrowser
 import android.app.Application
 import com.yukiorita.halfbrowser.core.SiteWatch
 import com.yukiorita.halfbrowser.notifications.SiteNotifier
+import com.yukiorita.halfbrowser.notifications.WebNotificationBridge
 import com.yukiorita.halfbrowser.work.WatchScheduler
 
 class HalfBrowserApplication : Application() {
@@ -12,6 +13,7 @@ class HalfBrowserApplication : Application() {
     override fun onCreate() {
         super.onCreate()
         SiteNotifier.ensureChannel(this)
+        WebNotificationBridge.ensureChannel(this)
         runCatching {
             val c = container
             val bookmarkIds = c.bookmarks.snapshot().map { it.id }.toSet()
