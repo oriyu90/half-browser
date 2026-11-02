@@ -26,6 +26,8 @@ class BrowserState {
     var webView: WebView? = null
     var progress by mutableIntStateOf(0)
     var loading by mutableStateOf(true)
+    /** An app-initiated navigation may wait for headers before onPageStarted. */
+    var pageLoadRequested by mutableStateOf(false)
     var pageTitle by mutableStateOf("")
     var currentUrl by mutableStateOf("")
     var lastRequestedUrl by mutableStateOf("")

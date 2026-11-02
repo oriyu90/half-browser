@@ -420,6 +420,7 @@ fun BrowserScreen(
         if (state.lastRequestedUrl != request.url) {
             state.lastRequestedUrl = request.url
             state.error = null
+            state.pageLoadRequested = true
             webView.loadUrl(request.url)
         }
     }
@@ -444,7 +445,10 @@ fun BrowserScreen(
                 onHome = onHome,
                 onReload = {
                     state.error = null
-                    if (state.webView == null) state.generation += 1 else state.webView?.reload()
+                    if (state.webView == null) state.generation += 1 else {
+                        state.pageLoadRequested = true
+                        state.webView?.reload()
+                    }
                 },
                 onBookmarks = { bookmarksOpen = true },
                 menuContent = {
@@ -495,6 +499,7 @@ fun BrowserScreen(
                         onClick = {
                             menuOpen = false
                             state.error = null
+                            if (state.webView != null) state.pageLoadRequested = true
                             state.webView?.reload()
                         },
                     )
@@ -584,6 +589,7 @@ fun BrowserScreen(
                                 // Renderer death: rebuild the WebView and reload the page.
                                 state.generation += 1
                             } else {
+                                state.pageLoadRequested = true
                                 state.webView?.reload()
                             }
                         },
@@ -1356,6 +1362,9 @@ private fun WebViewHost(
     // dark surface made ordinary pages (black text, no background) unreadable.
     val backgroundColor = android.graphics.Color.WHITE
     key(state.generation) {
+    var pageReady by remember { mutableStateOf(false) }
+    var loadingUrl by remember { mutableStateOf<String?>(null) }
+    Box(modifier = Modifier.fillMaxSize()) {
     AndroidView(
         modifier = Modifier.fillMaxSize(),
         factory = { ctx ->
@@ -1378,6 +1387,14 @@ private fun WebViewHost(
                         opened
                     },
                     showToast = toast,
+                    onPageLoading = { url ->
+                        loadingUrl = url
+                        pageReady = false
+                        state.pageLoadRequested = false
+                    },
+                    onPageReady = { url ->
+                        if (!state.pageLoadRequested && url == loadingUrl) pageReady = true
+                    },
                 )
                 webChromeClient = HalfBrowserChromeClient(state, container)
                 setDownloadListener(DownloadListener { url, _, contentDisposition, mimeType, _ ->
@@ -1417,6 +1434,10 @@ private fun WebViewHost(
         },
         update = { },
     )
+    if (darkTheme && (!pageReady || state.pageLoadRequested)) {
+        Box(Modifier.fillMaxSize().background(Color.Black))
+    }
+    }
     }
 }
 

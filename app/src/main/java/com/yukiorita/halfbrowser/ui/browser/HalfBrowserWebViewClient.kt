@@ -46,6 +46,8 @@ internal class HalfBrowserWebViewClient(
     private val container: AppContainer,
     private val openExternalApp: (String) -> Boolean,
     private val showToast: (String) -> Unit,
+    private val onPageLoading: (String?) -> Unit,
+    private val onPageReady: (String?) -> Unit,
 ) : WebViewClient() {
 
     /** scheme://host:port|realm -> number of silent attempts in this screen. */
@@ -57,9 +59,21 @@ internal class HalfBrowserWebViewClient(
      * document loads, leaving a half-rendered page.
      */
     private val sessionAllowedHosts = mutableSetOf<String>()
+    private val loadingNavigation = LoadingNavigation()
+
+    private fun releaseMaskWhenDrawReady(view: WebView?, url: String?) {
+        val token = loadingNavigation.tokenFor(url) ?: return
+        view?.postVisualStateCallback(token, object : WebView.VisualStateCallback() {
+            override fun onComplete(requestId: Long) {
+                if (loadingNavigation.isCurrent(requestId)) onPageReady(url)
+            }
+        })
+    }
 
     override fun onPageStarted(view: WebView?, url: String?, favicon: android.graphics.Bitmap?) {
         super.onPageStarted(view, url, favicon)
+        loadingNavigation.started(url)
+        onPageLoading(url)
         state.loading = true
         if (state.pendingAuthErrorUrl == null) state.error = null
         state.currentUrl = url.orEmpty()
@@ -68,6 +82,7 @@ internal class HalfBrowserWebViewClient(
 
     override fun onPageFinished(view: WebView?, url: String?) {
         super.onPageFinished(view, url)
+        releaseMaskWhenDrawReady(view, url)
         state.loading = false
         state.progress = 100
         state.currentUrl = url ?: state.currentUrl
@@ -90,6 +105,7 @@ internal class HalfBrowserWebViewClient(
 
     override fun onPageCommitVisible(view: WebView?, url: String?) {
         super.onPageCommitVisible(view, url)
+        releaseMaskWhenDrawReady(view, url)
         // A page actually rendered, so previous authentication failures for this
         // host are stale and silent auto-fill may be attempted again.
         val host = hostOf(url) ?: return
