@@ -7,6 +7,16 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class LoadingNavigationTest {
+    @Test fun fragmentOnlyNavigationIsDistinguishedFromNewDocuments() {
+        assertTrue(isFragmentOnlyNavigation("https://example.com/page#a", "https://example.com/page#b"))
+        assertTrue(isFragmentOnlyNavigation("https://example.com/page", "https://example.com/page#b"))
+        assertTrue(isFragmentOnlyNavigation("https://example.com/page#a", "https://example.com/page"))
+        assertFalse(isFragmentOnlyNavigation("", "https://example.com/page#a"))
+        assertFalse(isFragmentOnlyNavigation("https://example.com/page?a=1", "https://example.com/page?a=2#b"))
+        assertFalse(isFragmentOnlyNavigation("https://example.com/page#a", "https://example.com/other#b"))
+        assertFalse(isFragmentOnlyNavigation("https://example.com/page#a", "https://example.com/page#a"))
+    }
+
     @Test fun staleUrlDoesNotReleaseCurrentNavigation() {
         val navigation = LoadingNavigation()
         navigation.started("https://example.com/a")

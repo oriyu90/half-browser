@@ -53,7 +53,7 @@ Android 向けの小さな Chromium ブラウザです。ふつうのブラウ�
 
 ## インストール
 
-1. [Releases](https://github.com/oriyu90/half-browser/releases/latest) から `half-browser-1.5.0.apk` をダウンロードします。
+1. [Releases](https://github.com/oriyu90/half-browser/releases/latest) から `half-browser-1.5.1.apk` をダウンロードします。
 2. 端末で「提供元不明のアプリ」を許可してインストールします。
 3. 外部リンクを受け取りたい場合は、Android の設定 → アプリ → 既定のアプリ → ブラウザ で
    Half-Browser を選びます（アプリ内に既定ブラウザ設定ボタンはありません）。
@@ -152,6 +152,11 @@ Requires Android 8.0 (API 26) or later. MIT licensed. No ads, analytics, or acco
 See [docs/PLAN.md](docs/PLAN.md) and the [ADRs](docs/ADR/) for design decisions.
 
 ## 変更履歴
+
+### v1.5.1（2026-11-02）
+
+- ダークモードでページを読み込む間、白い画面の代わりに黒いマスクを表示します。ライトモードの表示とページ自体の背景は変更していません。
+- 読み込み完了後は WebView の描画準備通知に合わせてマスクを解除します。
 
 ### v1.5.0（2026-11-01）
 - **UI スケールを Web ページにも反映**。`setInitialScale` は viewport meta があると無視され、

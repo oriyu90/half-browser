@@ -420,7 +420,9 @@ fun BrowserScreen(
         if (state.lastRequestedUrl != request.url) {
             state.lastRequestedUrl = request.url
             state.error = null
-            state.pageLoadRequested = true
+            // Fragment-only navigation may not produce a WebView page-start callback.
+            // Keep the existing page visible instead of leaving a permanent mask.
+            state.pageLoadRequested = !isFragmentOnlyNavigation(state.currentUrl, request.url)
             webView.loadUrl(request.url)
         }
     }
