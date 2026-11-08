@@ -9,6 +9,8 @@ import android.os.Build
 import android.webkit.ClientCertRequest
 import android.webkit.GeolocationPermissions
 import android.webkit.HttpAuthHandler
+import android.webkit.JsPromptResult
+import android.webkit.JsResult
 import android.webkit.PermissionRequest
 import android.webkit.RenderProcessGoneDetail
 import android.webkit.SslErrorHandler
@@ -386,6 +388,24 @@ internal class HalfBrowserWebViewClient(
     }
 }
 
+private const val MAX_DIALOG_LENGTH = 1000
+private const val MAX_PROMPT_LENGTH = 2000
+
+/**
+ * A page controls the dialog text, so it is bounded and stripped of control
+ * characters before Compose renders it. Newlines are kept: they are meaningful
+ * in a multi-line alert.
+ */
+private fun sanitizeDialogText(value: String?): String {
+    if (value == null) return ""
+    val cleaned = value.filter { it == '\n' || (it.code >= 0x20 && it.code != 0x7f) }
+    return if (cleaned.length > MAX_DIALOG_LENGTH) cleaned.take(MAX_DIALOG_LENGTH) + "…" else cleaned
+}
+
+/** Origin label shown on a JS dialog; falls back to the raw URL host. */
+private fun originOf(url: String?): String =
+    com.yukiorita.halfbrowser.core.SitePermissions.originOf(url) ?: (url ?: "").take(120)
+
 /** Strips control characters and bounds the length of text shown in auth UI. */
 private fun sanitizeAuthLabel(value: String, maxLength: Int): String =
     value.filter { it.code >= 0x20 && it.code != 0x7f }.take(maxLength)
@@ -394,6 +414,120 @@ internal class HalfBrowserChromeClient(
     private val state: BrowserState,
     private val container: AppContainer,
 ) : WebChromeClient() {
+
+    /**
+     * Native dialog budget. The document-start shim ([com.yukiorita.halfbrowser.core.JsGuard])
+     * rate-limits dialogs inside the page, but a page that captured `alert`
+     * before the shim installed — or that calls the callback path directly —
+     * still reaches these handlers. This budget is the authoritative limit.
+     */
+    private val dialogs = com.yukiorita.halfbrowser.core.DialogBudget()
+
+    private fun guardEnabled(): Boolean = container.settings.current().jsGuardEnabled
+
+    override fun onJsAlert(
+        view: WebView?,
+        url: String?,
+        message: String?,
+        result: JsResult?,
+    ): Boolean {
+        if (result == null) return false
+        if (!guardEnabled()) return false // let WebView show its own dialog
+        if (!dialogs.allowDialog(android.os.SystemClock.elapsedRealtime())) {
+            runCatching { result.cancel() }
+            return true
+        }
+        // Only one dialog at a time: a new one supersedes the previous.
+        state.jsDialog?.settle(JsDialogResult.Dismiss)
+        state.jsDialog = JsDialogRequest(
+            kind = JsDialogKind.ALERT,
+            message = sanitizeDialogText(message),
+            defaultText = "",
+            origin = originOf(url),
+            onResult = { runCatching { result.confirm() } },
+        )
+        return true
+    }
+
+    override fun onJsConfirm(
+        view: WebView?,
+        url: String?,
+        message: String?,
+        result: JsResult?,
+    ): Boolean {
+        if (result == null) return false
+        if (!guardEnabled()) return false
+        if (!dialogs.allowDialog(android.os.SystemClock.elapsedRealtime())) {
+            runCatching { result.cancel() }
+            return true
+        }
+        state.jsDialog?.settle(JsDialogResult.Dismiss)
+        state.jsDialog = JsDialogRequest(
+            kind = JsDialogKind.CONFIRM,
+            message = sanitizeDialogText(message),
+            defaultText = "",
+            origin = originOf(url),
+            onResult = { outcome ->
+                runCatching {
+                    if (outcome is JsDialogResult.Confirm) result.confirm() else result.cancel()
+                }
+            },
+        )
+        return true
+    }
+
+    override fun onJsPrompt(
+        view: WebView?,
+        url: String?,
+        message: String?,
+        defaultValue: String?,
+        result: JsPromptResult?,
+    ): Boolean {
+        if (result == null) return false
+        if (!guardEnabled()) return false
+        if (!dialogs.allowDialog(android.os.SystemClock.elapsedRealtime())) {
+            runCatching { result.cancel() }
+            return true
+        }
+        state.jsDialog?.settle(JsDialogResult.Dismiss)
+        state.jsDialog = JsDialogRequest(
+            kind = JsDialogKind.PROMPT,
+            message = sanitizeDialogText(message),
+            defaultText = (defaultValue ?: "").take(MAX_PROMPT_LENGTH),
+            origin = originOf(url),
+            onResult = { outcome ->
+                runCatching {
+                    when (outcome) {
+                        is JsDialogResult.Text -> result.confirm(outcome.value)
+                        else -> result.cancel()
+                    }
+                }
+            },
+        )
+        return true
+    }
+
+    /**
+     * `beforeunload` is the classic "you cannot leave" trap. The page may ask
+     * twice; after that the app answers "leave" itself so the user is never
+     * stuck on a page.
+     */
+    override fun onJsBeforeUnload(
+        view: WebView?,
+        url: String?,
+        message: String?,
+        result: JsResult?,
+    ): Boolean {
+        if (result == null) return false
+        if (!guardEnabled()) return false
+        if (!dialogs.allowBeforeUnload()) {
+            runCatching { result.confirm() }
+            state.jsLeaveTrap = true
+            return true
+        }
+        state.jsLeaveTrap = false
+        return false // WebView's own prompt is fine for the first attempts
+    }
 
     override fun onProgressChanged(view: WebView?, newProgress: Int) {
         state.progress = newProgress.coerceIn(0, 100)

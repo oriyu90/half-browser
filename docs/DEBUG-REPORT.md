@@ -109,6 +109,33 @@ v1.0.1 で修正した。詳細と証跡は [DEVICE-QA-SOV40.md](DEVICE-QA-SOV40
 | B-23 | 「カメラで撮影」を押しても起動しない | FileProvider の authority が文字列補間されず `${context.packageName}.fileprovider` のままだった | `"${context.packageName}.fileprovider"` に修正 |
 | B-24 | ACTION_IMAGE_CAPTURE が `SecurityException`（CAMERA 宣言済み・未許可） | CAMERA を Manifest に追加したため、撮影インテントに実行時許可が必要 | 撮影前に CAMERA を要求し、許可後に起動 |
 
+## 6. v1.6.0 検証（2026-11-09、エミュレータ API 34 / WebView 113）
+
+### 6.1 VPN
+
+| 項目 | 結果 |
+|---|---|
+| 依存解決（Maven Central `com.wireguard.android:tunnel:1.0.20260102`） | 成功。AAR に全 ABI の `libwg-go.so` |
+| プロファイル追加（手入力／ファイル読み込み） | 成功。不正設定は項目ごとの理由で拒否（実測） |
+| システム同意 → 接続 | トンネル Up（`Device started`）。VPN ネットワークに自 UID のみ紐付けを確認 |
+| 再接続 | 初回実装では切断→即時起動で新トンネルが破壊される競合を実測。切断後 600ms のクールダウンで修正し、接続維持を再確認 |
+| ハンドシェイクのパケット到達 | **未確認**。ホスト上の対向サーバ（`tools/vpn-test/wg_responder.py`、純粋 Python 実装）にパケットが届かない。`/proc/net/dev` で eth0 TX が増えず tun0 TX が増える（トンネル内ループ）ことを確認。公式 WireGuard アプリでも同一設定で再現したため、エミュレータ（user-net）の protect 経路の制限と判断。実機確認が残課題 |
+
+### 6.2 JS 攻撃対策（`tools/vpn-test/attack.html`、CDP で操作）
+
+| 攻撃 | 結果 |
+|---|---|
+| alert 20 連打 | 12 表示（うち origin 付き）、残り 8 は自動ブロック。ループ終了を確認 |
+| `window.open` 5 連打 | 5 件すべてブロック（`popupsBlocked=5`） |
+| `beforeunload` 5 登録 | 3 件ブロック（`beforeUnloadBlocked=3`）。離脱は確認ダイアログ経由で可能 |
+| `location = 'javascript:alert(1)'` | 実行されるが、その alert は予算でブロック。代入自体は止められない（ADR-0019 の限界） |
+
+### 6.3 UI（日本語・英語）
+
+- 設定→VPN、設定→セキュリティ（JS ガードトグル）、ホーム下部パネル（接続／切断／再接続、
+  一覧の展開・選択表示・管理）を日英とも目視確認。FAB とパネルの重なりは `bottomBar` 化で解消。
+- JVM テスト **162 件 / 失敗 0**、lint **Error 0**。
+
 ## 5. 再発防止
 
 1. **実機でしか出ない不具合**（B-01, B-02, B-03, B-04）を優先して確認する。静的テスト・lint だけでは検出できない。

@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="ja"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>JS attack test</title>
+<style>body{font-family:sans-serif;margin:1.2rem;line-height:1.7}
+button{padding:.6rem 1rem;margin:.3rem;font-size:1rem}
+#log{background:#f3f3f3;padding:.6rem;white-space:pre-wrap;border-radius:.4rem;min-height:6rem}
+</style></head><body>
+<h1>JS 攻撃テスト</h1>
+<p>JsGuard の動作確認用。各ボタンを押すと対応する攻撃を試みます。</p>
+<button id="b1">alert 連打 (20回)</button>
+<button id="b2">beforeunload トラップ登録</button>
+<button id="b3">javascript: への遷移</button>
+<button id="b4">window.open 連打</button>
+<button id="b5">カウンタ表示</button>
+<pre id="log">ログ</pre>
+<script>
+var log = document.getElementById('log');
+function say(s){ log.textContent += '\n' + s; }
+document.getElementById('b1').onclick = function(){
+  say('alert spam start');
+  for (var i=0;i<20;i++){ alert('spam ' + i); }
+  say('alert spam end');
+};
+document.getElementById('b2').onclick = function(){
+  for (var i=0;i<5;i++){
+    window.addEventListener('beforeunload', function(e){ e.preventDefault(); e.returnValue=''; return ''; });
+  }
+  say('beforeunload handlers registered x5');
+};
+document.getElementById('b3').onclick = function(){
+  say('location = javascript:...');
+  location = 'javascript:alert(1)';
+  say('after assignment, still here');
+};
+document.getElementById('b4').onclick = function(){
+  say('window.open x5');
+  for (var i=0;i<5;i++){ window.open('about:blank'); }
+  say('open attempts done');
+};
+document.getElementById('b5').onclick = function(){
+  try {
+    var c = window.__hbJsGuard ? window.__hbJsGuard.read() : null;
+    say('counters: ' + JSON.stringify(c));
+  } catch(e){ say('counters error: ' + e); }
+};
+say('page ready');
+</script>
+</body></html>

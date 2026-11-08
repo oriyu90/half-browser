@@ -607,6 +607,23 @@ fun SettingsScreen(
                     }
                     if (tab == SettingsTab.SECURITY) {
                         item {
+                            SettingsCard(title = stringResource(R.string.settings_js_guard)) {
+                                SwitchRow(
+                                    title = stringResource(R.string.settings_js_guard),
+                                    description = stringResource(R.string.settings_js_guard_desc),
+                                    checked = settings.jsGuardEnabled,
+                                    onCheckedChange = { enabled ->
+                                        container.settings.update { it.copy(jsGuardEnabled = enabled) }
+                                    },
+                                )
+                                Text(
+                                    text = stringResource(R.string.settings_js_guard_note),
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            }
+                        }
+                        item {
                             SettingsCard(title = stringResource(R.string.settings_section_security)) {
                                 Text(
                                     text = stringResource(R.string.settings_trusted_sites),
@@ -780,6 +797,9 @@ fun SettingsScreen(
                             }
                     }
 
+                    }
+                    if (tab == SettingsTab.VPN) {
+                        item { VpnSettingsTab(container) }
                     }
                     if (tab == SettingsTab.BACKUP) {
                         item {
@@ -976,6 +996,7 @@ enum class SettingsTab(val labelRes: Int) {
     PERMISSIONS(R.string.settings_tab_permissions),
     NOTIFICATIONS(R.string.settings_tab_notifications),
     SECURITY(R.string.settings_tab_security),
+    VPN(R.string.settings_tab_vpn),
     BACKUP(R.string.settings_tab_backup),
     ABOUT(R.string.settings_tab_about),
 }

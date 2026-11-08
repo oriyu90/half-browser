@@ -769,6 +769,16 @@ fun BrowserScreen(
         )
     }
 
+    state.jsDialog?.let { dialog ->
+        JsDialogHost(
+            request = dialog,
+            onResult = { result ->
+                state.jsDialog = null
+                dialog.settle(result)
+            },
+        )
+    }
+
     state.ssl?.let { challenge ->
         SslInterstitialDialog(
             challenge = challenge,
@@ -1713,6 +1723,9 @@ private fun installDocumentScripts(webView: WebView) {
         com.yukiorita.halfbrowser.core.WebCompat.POLYFILL_JS,
         com.yukiorita.halfbrowser.core.KeyboardGuard.JS,
         com.yukiorita.halfbrowser.core.WebNotify.JS,
+        // First line of defence against hostile page scripts. Injected before
+        // any page script, so a page cannot capture the native dialogs first.
+        com.yukiorita.halfbrowser.core.JsGuard.JS,
     ).forEach { script ->
         runCatching { WebViewCompat.addDocumentStartJavaScript(webView, script, setOf("*")) }
     }

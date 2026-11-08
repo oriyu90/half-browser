@@ -105,6 +105,19 @@ data class AppSettings(
      * immediately (a foreground service is shown while this is on).
      */
     val backgroundWebNotifications: Boolean = false,
+    /**
+     * WireGuard profile the user last chose on the home screen. Kept as an id so
+     * a deleted profile simply leaves the panel without a selection.
+     */
+    val vpnSelectedProfileId: String = "",
+    /** Reconnect automatically when the app starts with a profile selected. */
+    val vpnAutoConnect: Boolean = false,
+    /**
+     * Defence against hostile in-page JavaScript (dialog rate limits, scripted
+     * popups, `javascript:` navigation). On by default; the toggle exists for a
+     * site that legitimately needs many dialogs.
+     */
+    val jsGuardEnabled: Boolean = true,
 ) {
     companion object {
         val DEFAULT = AppSettings()

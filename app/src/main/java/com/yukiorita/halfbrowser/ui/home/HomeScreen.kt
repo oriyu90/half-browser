@@ -118,6 +118,18 @@ fun HomeScreen(
         BookmarkShortcuts.syncDynamic(context, bookmarks)
     }
 
+    // Optional auto-connect. Only runs when the user previously granted the
+    // system VPN consent; otherwise the panel's Connect button asks for it, so
+    // the app never throws a system dialog at the user on launch.
+    LaunchedEffect(Unit) {
+        val current = container.settings.current()
+        if (!current.vpnAutoConnect) return@LaunchedEffect
+        val profile = container.vpnStore.find(current.vpnSelectedProfileId) ?: return@LaunchedEffect
+        if (container.vpn.state.value.isActive) return@LaunchedEffect
+        if (container.vpn.needsSystemConsent()) return@LaunchedEffect
+        container.vpn.connect(profile)
+    }
+
     fun message(text: String) {
         scope.launch { snackbarHostState.showSnackbar(text) }
     }
@@ -212,6 +224,15 @@ fun HomeScreen(
                     contentDescription = stringResource(R.string.home_add_bookmark),
                 )
             }
+        },
+        // The VPN panel lives in the bottom bar so it is pinned below the grid
+        // and can never be covered by the FAB. Scaffold pads the content by
+        // the bar's height, so grid items never slide under it.
+        bottomBar = {
+            HomeVpnPanel(
+                container = container,
+                onOpenSettings = onOpenSettings,
+            )
         },
     ) { innerPadding ->
         BoxWithConstraints(

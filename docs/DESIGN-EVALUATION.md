@@ -178,3 +178,26 @@
 - **実機固有の修正**: 失効の即時反映（`clearSslPreferences`）、読込前タイトル、認証キャンセル時の
   401 表示、ダイアログ外タップによる入力消失を v1.0.1 で修正（[DEVICE-QA-SOV40.md](DEVICE-QA-SOV40.md)）。
 - **判定**: **リリース可（PASS_WITH_NOTES）**。ただし API 26–28 実機・ファイル選択・レンダラ強制終了は未検証として明記する。
+
+---
+
+## 10. v1.6.0 の追加設計評価（2026-11-09）
+
+- **VPN（ADR-0018）**: 公式 userspace WireGuard（`com.wireguard.android:tunnel`）。スコープは
+  allow-list（`IncludedApplications = 自パッケージ`）で fail-closed に保証する。除外リスト方式は
+  Android 11+ のパッケージ可視性で列挙漏れ＝fail-open になるため不採用。プロファイルは
+  Keystore 暗号化保存、設定検証は厳格パーサ（鍵の canonical 形式・Endpoint・CIDR・上限）。
+  再接続時の `stopSelf` 競合（新トンネルが即座に破壊される）を実測し、切断後 600ms の
+  クールダウンで解消した。
+- **JS 攻撃対策（ADR-0019）**: document-start シム＋ネイティブ予算の二層防御。
+  alert 連打 20 → 12 表示・8 ブロック、popup 5 → 全ブロック、beforeunload 登録 5 → 3 ブロック。
+  ダイアログはアプリ側で origin 表示。`location = 'javascript:...'` の代入は実行されるが
+  その alert は予算で止まる（シムで止められない限界を明記）。
+- **品質指標**: JVM テスト **162 件 / 失敗 0**、lint **Error 0**、日英 **424/424** キー一致。
+- **互換性**: バックアップ形式・設定 JSON の既存フィールド・証明書ピン・資格情報ストアは
+  不変。設定の追加フィールドは既定値付き。VPN プロファイルはバックアップ対象外（秘密鍵方針）。
+- **未検証（正直な記録）**: エミュレータ（user-net）では protect 済み UDP がトンネル内を
+  ループし、WireGuard ハンドシェイクがホストに届かない。公式 WireGuard アプリでも同一設定で
+  再現したためエミュレータ環境の制限。実機での対向接続は残課題。詳細は
+  [DEBUG-REPORT.md](DEBUG-REPORT.md) §v1.6.0。
+- **判定**: 上記残課題を明記した上で **リリース可（PASS_WITH_NOTES）**。

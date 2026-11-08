@@ -11,6 +11,8 @@ import com.yukiorita.halfbrowser.data.SiteFetcher
 import com.yukiorita.halfbrowser.data.SitePermissionRepository
 import com.yukiorita.halfbrowser.data.SiteWatchRepository
 import com.yukiorita.halfbrowser.data.TrustRepository
+import com.yukiorita.halfbrowser.data.VpnController
+import com.yukiorita.halfbrowser.data.VpnStore
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -39,6 +41,8 @@ class AppContainer(context: Context) {
     val favicons: FaviconRepository by lazy {
         FaviconRepository(appContext, bookmarks, siteFetcher, settings)
     }
+    val vpnStore: VpnStore by lazy { VpnStore(appContext) }
+    val vpn: VpnController by lazy { VpnController(appContext, vpnStore) }
 
     private val _trustRevision = MutableStateFlow(0)
     /** Incremented when the user trusts/revokes a certificate in settings. */

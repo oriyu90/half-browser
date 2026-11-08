@@ -42,6 +42,16 @@ class BrowserState {
     var fileChooser by mutableStateOf<FileChooserRequest?>(null)
     var webPermission by mutableStateOf<WebPermissionRequest?>(null)
     var geoPermission by mutableStateOf<GeoPermissionRequest?>(null)
+    /**
+     * A JavaScript dialog the page asked for. The native `onJsAlert` handler
+     * stores it here instead of letting WebView show its own dialog, so the
+     * app can rate-limit and label it with the page's origin.
+     */
+    var jsDialog by mutableStateOf<JsDialogRequest?>(null)
+
+    /** Set when a page tries to leave via beforeunload more often than allowed. */
+    var jsLeaveTrap by mutableStateOf(false)
+
     var fullscreenView by mutableStateOf<android.view.View?>(null)
     var fullscreenCallback by mutableStateOf<WebChromeClient.CustomViewCallback?>(null)
     var desktopMode by mutableStateOf(false)
@@ -92,6 +102,32 @@ class GeoPermissionRequest(
     private val callback: GeolocationPermissions.Callback,
 ) {
     fun resolve(allow: Boolean) = runCatching { callback.invoke(origin, allow, false) }
+}
+
+/** One pending JavaScript dialog. Exactly one of the result callbacks runs. */
+class JsDialogRequest(
+    val kind: JsDialogKind,
+    val message: String,
+    val defaultText: String,
+    val origin: String,
+    private val onResult: (JsDialogResult) -> Unit,
+) {
+    private var settled = false
+
+    fun settle(result: JsDialogResult) {
+        if (settled) return
+        settled = true
+        runCatching { onResult(result) }
+    }
+}
+
+enum class JsDialogKind { ALERT, CONFIRM, PROMPT }
+
+sealed interface JsDialogResult {
+    data object Dismiss : JsDialogResult
+    data object Confirm : JsDialogResult
+    data object Cancel : JsDialogResult
+    data class Text(val value: String) : JsDialogResult
 }
 
 data class BrowserError(

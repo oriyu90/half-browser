@@ -1,0 +1,10 @@
+<!doctype html><html><head><title>marker</title></head><body>
+<h1>marker page</h1>
+<script>
+try {
+  localStorage.setItem('hb_marker', 'loaded-' + Date.now());
+  var c = parseInt(localStorage.getItem('hb_count') || '0', 10) + 1;
+  localStorage.setItem('hb_count', String(c));
+} catch(e) {}
+</script>
+</body></html>

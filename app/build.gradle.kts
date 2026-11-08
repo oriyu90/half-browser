@@ -12,8 +12,8 @@ android {
     applicationId = "com.yukiorita.halfbrowser"
     minSdk = 26
     targetSdk = 36
-    versionCode = 8
-    versionName = "1.5.1"
+    versionCode = 9
+    versionName = "1.6.0"
     resourceConfigurations += listOf("en", "ja")
   }
 
@@ -77,6 +77,9 @@ dependencies {
   implementation(libs.androidx.work.runtime.ktx)
   implementation(libs.kotlinx.serialization.json)
   implementation(libs.kotlinx.coroutines.android)
+  // Userspace WireGuard (wireguard-go). The AAR ships libwg-go.so for every ABI
+  // and merges its own VpnService; no root and no kernel module are required.
+  implementation(libs.wireguard.tunnel)
 
   debugImplementation(libs.androidx.compose.ui.tooling)
 

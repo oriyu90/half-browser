@@ -35,6 +35,7 @@ object Codecs {
         accentSaturation = settings.accentSaturation
             .coerceIn(AppSettings.MIN_ACCENT_SATURATION, AppSettings.MAX_ACCENT_SATURATION),
         accentTone = settings.accentTone.coerceIn(0f, 1f),
+        vpnSelectedProfileId = settings.vpnSelectedProfileId.take(64),
     )
 
     fun encodeBookmarks(items: List<Bookmark>): String =
