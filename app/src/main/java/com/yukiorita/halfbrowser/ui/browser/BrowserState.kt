@@ -14,6 +14,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import com.yukiorita.halfbrowser.core.DialogBudget
 import com.yukiorita.halfbrowser.core.SitePermissionKind
 import com.yukiorita.halfbrowser.core.TrustPolicy
 import java.io.ByteArrayInputStream
@@ -49,8 +50,13 @@ class BrowserState {
      */
     var jsDialog by mutableStateOf<JsDialogRequest?>(null)
 
-    /** Set when a page tries to leave via beforeunload more often than allowed. */
-    var jsLeaveTrap by mutableStateOf(false)
+    /**
+     * Native JS-dialog budget, shared by the WebViewClient (reset on every
+     * main-frame page start) and the ChromeClient (enforced on every dialog
+     * request). It lives here rather than in the ChromeClient so the page
+     * boundary — which the client does not see — can reset it.
+     */
+    val dialogBudget = DialogBudget()
 
     var fullscreenView by mutableStateOf<android.view.View?>(null)
     var fullscreenCallback by mutableStateOf<WebChromeClient.CustomViewCallback?>(null)

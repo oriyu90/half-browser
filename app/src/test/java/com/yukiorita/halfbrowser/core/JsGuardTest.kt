@@ -78,4 +78,45 @@ class DialogBudgetTest {
         assertFalse(js.contains("eval("))
         assertFalse(js.contains("HalfBrowserNotify.postMessage"))
     }
+
+    @Test
+    fun `every defence block is failure-isolated`() {
+        // One block throwing in strict mode must not take the others down, so
+        // each block sits in its own try/catch — including the dialog
+        // replacement, which previously was unwrapped.
+        val js = JsGuard.JS
+        val tryCount = js.split("try {").size - 1
+        assertTrue("expected per-block try/catch, got $tryCount", tryCount >= 8)
+        val dialogBlock = js.indexOf("var nativeAlert")
+        val beforeUnloadBlock = js.indexOf("addEventListener")
+        assertTrue(dialogBlock >= 0 && beforeUnloadBlock > dialogBlock)
+    }
+
+    @Test
+    fun `protect branches on descriptor shape`() {
+        // A descriptor is either data (`value`) or accessor (`get`/`set`);
+        // passing both forms at once throws a TypeError, so the shim must
+        // branch on the shape instead of setting both.
+        val js = JsGuard.JS
+        assertTrue(js.contains("'value' in descriptor"))
+        assertTrue(js.contains("writable: false"))
+    }
+
+    @Test
+    fun `beforeunload property assignment is counted`() {
+        // `window.onbeforeunload = fn` does not go through addEventListener,
+        // so without this the limit is bypassable by plain assignment.
+        val js = JsGuard.JS
+        assertTrue(js.contains("Object.defineProperty(W, 'onbeforeunload'"))
+        assertTrue(js.contains("beforeUnloadCount++"))
+        assertTrue(js.contains("counters.beforeUnloadBlocked++"))
+    }
+
+    @Test
+    fun `popup comment matches the always-blocked native layer`() {
+        // onCreateWindow returns false, so there is no gesture exception in
+        // practice; the shim must not claim OAuth popups are allowed.
+        assertFalse(JsGuard.JS.contains("OAuth popups are"))
+        assertTrue(JsGuard.JS.contains("onCreateWindow"))
+    }
 }

@@ -23,7 +23,10 @@ package com.yukiorita.halfbrowser.core
  * ---------------------
  * [JS] is injected at document start (before any page script) and:
  *  - rate-limits `alert`/`confirm`/`prompt` and `beforeunload` prompts;
- *  - blocks script-driven `window.open` and `javascript:` navigations;
+ *  - blocks script-driven `window.open` and `javascript:` navigations via
+ *    `Location.assign`/`replace` (note: `window.open` is in fact always blocked
+ *    app-side because `onCreateWindow` returns false; the shim only cuts the
+ *    non-gesture storm earlier);
  *  - makes the app's own globals non-writable so a page cannot replace them;
  *  - reports every block to a counters object the app can read for diagnostics.
  *
@@ -33,6 +36,11 @@ package com.yukiorita.halfbrowser.core
  *    still gets one. Only *abuse* (rate) is stopped.
  *  - It never changes page content, cookies or storage.
  *  - It is not a substitute for the WebView sandbox; it is defence in depth.
+ *  - It cannot stop `location = 'javascript:...'` / `location.href = ...`
+ *    assignment: `Location`'s accessor is not overwritable from a document-start
+ *    script, so that assignment still executes. The dialog budget (and the
+ *    native [DialogBudget], the final line of defence) is what stops the
+ *    script it runs from looping. See ADR-0019.
  *
  * [DialogBudget] is the same policy expressed in Kotlin so the rules can be
  * unit-tested without a device, and so the native `onJsAlert` handler and the
@@ -115,31 +123,39 @@ object JsGuard {
   }
 
   // --- dialogs -------------------------------------------------------------
-  var nativeAlert = W.alert;
-  var nativeConfirm = W.confirm;
-  var nativePrompt = W.prompt;
-  if (typeof nativeAlert === 'function') {
-    W.alert = native(function (message) {
-      if (!allowDialog()) return undefined;
-      return nativeAlert.call(W, message);
-    }, 'alert', 0);
-  }
-  if (typeof nativeConfirm === 'function') {
-    W.confirm = native(function (message) {
-      if (!allowDialog()) return false;
-      return nativeConfirm.call(W, message);
-    }, 'confirm', 0);
-  }
-  if (typeof nativePrompt === 'function') {
-    W.prompt = native(function (message, defaultValue) {
-      if (!allowDialog()) return null;
-      return nativePrompt.call(W, message, defaultValue);
-    }, 'prompt', 0);
-  }
+  // Each defence block below is wrapped on its own: in strict mode a single
+  // failed assignment (e.g. a non-writable `alert`) must not take the whole
+  // shim down with it.
+  try {
+    var nativeAlert = W.alert;
+    var nativeConfirm = W.confirm;
+    var nativePrompt = W.prompt;
+    if (typeof nativeAlert === 'function') {
+      W.alert = native(function (message) {
+        if (!allowDialog()) return undefined;
+        return nativeAlert.call(W, message);
+      }, 'alert', 0);
+    }
+    if (typeof nativeConfirm === 'function') {
+      W.confirm = native(function (message) {
+        if (!allowDialog()) return false;
+        return nativeConfirm.call(W, message);
+      }, 'confirm', 0);
+    }
+    if (typeof nativePrompt === 'function') {
+      W.prompt = native(function (message, defaultValue) {
+        if (!allowDialog()) return null;
+        return nativePrompt.call(W, message, defaultValue);
+      }, 'prompt', 0);
+    }
+  } catch (e) {}
 
   // --- beforeunload trap ---------------------------------------------------
   // The page may ask once or twice; a loop that re-registers on every prompt is
-  // what makes a tab impossible to leave.
+  // what makes a tab impossible to leave. Both registration paths are counted:
+  // `addEventListener('beforeunload', ...)` and the `window.onbeforeunload =`
+  // property assignment, which does NOT go through addEventListener. (The
+  // native DialogBudget remains the final line of defence for both.)
   try {
     var nativeAdd = EventTarget.prototype.addEventListener;
     EventTarget.prototype.addEventListener = native(function (type, listener, options) {
@@ -153,15 +169,42 @@ object JsGuard {
       return nativeAdd.call(this, type, listener, options);
     }, 'addEventListener', 2);
   } catch (e) {}
+  try {
+    var storedBeforeUnload = null;
+    Object.defineProperty(W, 'onbeforeunload', {
+      configurable: true,
+      enumerable: true,
+      get: function () { return storedBeforeUnload; },
+      set: function (value) {
+        if (value != null) {
+          beforeUnloadCount++;
+          if (beforeUnloadCount > MAX_BEFORE_UNLOAD) {
+            // Over the limit: drop the handler entirely so the native
+            // prompt never fires for this registration.
+            counters.beforeUnloadBlocked++;
+            storedBeforeUnload = null;
+            return;
+          }
+        }
+        storedBeforeUnload = value;
+      }
+    });
+  } catch (e) {}
 
   // --- popups --------------------------------------------------------------
+  //
+  // NOTE: in this app a gesture `window.open` is NOT actually allowed through.
+  // The app's WebChromeClient `onCreateWindow` always returns false, so every
+  // new window is refused at the native layer anyway; this shim only drops a
+  // non-gesture storm a little earlier, before it can spin a loop. There is
+  // no OAuth-popup exception in practice.
   try {
     var nativeOpen = W.open;
     if (typeof nativeOpen === 'function') {
       W.open = native(function (url, target, features) {
-        // A user-gesture window.open is legitimate (OAuth popups); a scripted
-        // storm is not. The app's WebChromeClient also refuses new windows, so
-        // this is the second line of defence.
+        // See the note above: with MAX_POPUPS = 0 anything that is not an
+        // active user gesture is counted and refused here; a gesture still
+        // reaches nativeOpen, where onCreateWindow=false refuses it for good.
         var gesture = false;
         try { gesture = !!(navigator.userActivation && navigator.userActivation.isActive); } catch (e) {}
         if (!gesture && popupCount >= MAX_POPUPS) {
@@ -176,9 +219,15 @@ object JsGuard {
   } catch (e) {}
 
   // --- javascript: navigation ---------------------------------------------
-  // Assigning `location = 'javascript:...'` executes code in the *current*
-  // origin with no user gesture. Clicking such a link still works (the click is
-  // a gesture and the URL is resolved by the engine, not by this setter).
+  // `Location.assign`/`replace` with a `javascript:` URL are blocked here.
+  // Direct assignment — `location = 'javascript:...'` or
+  // `location.href = 'javascript:...'` — CANNOT be stopped by this shim:
+  // `Location`'s accessor is not overwritable from a document-start script
+  // (ADR-0019), so that assignment executes in the current origin. What stops
+  // its damage is the dialog budget: any alert/confirm/prompt it runs is
+  // rate-limited (and the native DialogBudget is the final line of defence).
+  // Clicking such a link still works (the click is a gesture and the URL is
+  // resolved by the engine, not by this setter).
   try {
     var nativeReplace = Location.prototype.replace;
     var nativeAssign = Location.prototype.assign;
@@ -201,19 +250,34 @@ object JsGuard {
 
   // --- protect the app's own globals --------------------------------------
   // A page must not be able to replace the notification bridge with one that
-  // lies to the app, nor swap the guard itself.
-  var protect = function (name) {
-    try {
-      var descriptor = Object.getOwnPropertyDescriptor(W, name);
-      if (descriptor && descriptor.configurable) {
-        Object.defineProperty(W, name, {
-          get: descriptor.get, set: undefined, value: descriptor.value,
-          enumerable: descriptor.enumerable, configurable: false
-        });
-      }
-    } catch (e) {}
-  };
-  protect('HalfBrowserNotify');
+  // lies to the app, nor swap the guard itself. A property descriptor is
+  // either a DATA descriptor (`value`) or an ACCESSOR descriptor (`get`/`set`);
+  // passing both forms at once is a TypeError, so branch on the shape.
+  try {
+    var protect = function (name) {
+      try {
+        var descriptor = Object.getOwnPropertyDescriptor(W, name);
+        if (descriptor && descriptor.configurable) {
+          if ('value' in descriptor) {
+            Object.defineProperty(W, name, {
+              value: descriptor.value,
+              writable: false,
+              enumerable: descriptor.enumerable,
+              configurable: false
+            });
+          } else {
+            Object.defineProperty(W, name, {
+              get: descriptor.get,
+              set: undefined,
+              enumerable: descriptor.enumerable,
+              configurable: false
+            });
+          }
+        }
+      } catch (e) {}
+    };
+    protect('HalfBrowserNotify');
+  } catch (e) {}
 })();
 """.trimIndent()
 }

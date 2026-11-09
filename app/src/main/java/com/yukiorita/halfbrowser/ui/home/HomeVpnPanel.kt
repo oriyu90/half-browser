@@ -12,9 +12,12 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -37,6 +40,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -55,6 +59,7 @@ import com.yukiorita.halfbrowser.AppContainer
 import com.yukiorita.halfbrowser.R
 import com.yukiorita.halfbrowser.core.VpnProfile
 import com.yukiorita.halfbrowser.data.VpnState
+import com.yukiorita.halfbrowser.ui.settings.failureText
 
 /**
  * Compact VPN panel pinned to the bottom of the home screen.
@@ -106,10 +111,24 @@ internal fun HomeVpnPanel(
         }
     }
 
+    // Show the failure reason, not just the red dot (same mapping as the
+    // settings tab, via the shared internal failureText).
+    LaunchedEffect(vpnState) {
+        val failed = vpnState as? VpnState.Failed ?: return@LaunchedEffect
+        notice = context.getString(failureText(failed.reason))
+    }
+
+    // A stored selection id that no longer exists means "no selection", in
+    // the header and in the rows alike (the settings tab shows the same).
     val selected = profiles.firstOrNull { it.id == settings.vpnSelectedProfileId }
-        ?: profiles.firstOrNull()
+    // Connecting still falls back to the first profile, as in the settings
+    // tab — only the *display* is unified on "unselected".
+    val connectTarget = selected ?: profiles.firstOrNull()
     val connectedProfile = profiles.firstOrNull { it.id == vpnState.profileId }
-    val busy = vpnState is VpnState.Connecting || vpnState is VpnState.Disconnecting
+    // While the system consent dialog is up, block further taps: a second
+    // connect would overwrite the single pendingConsent slot.
+    val busy = vpnState is VpnState.Connecting || vpnState is VpnState.Disconnecting ||
+        pendingConsent != null
 
     Surface(
         modifier = modifier.fillMaxWidth(),
@@ -175,8 +194,8 @@ internal fun HomeVpnPanel(
                 } else {
                     FilledTonalButton(
                         onClick = {
-                            if (selected != null) {
-                                connect(selected)
+                            if (connectTarget != null) {
+                                connect(connectTarget)
                             } else {
                                 onOpenSettings()
                             }
@@ -232,9 +251,14 @@ internal fun HomeVpnPanel(
                 enter = expandVertically(),
                 exit = shrinkVertically(),
             ) {
-                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Column(
+                    modifier = Modifier
+                        .heightIn(max = 320.dp)
+                        .verticalScroll(rememberScrollState()),
+                    verticalArrangement = Arrangement.spacedBy(4.dp),
+                ) {
                     profiles.forEach { profile ->
-                        val isSelected = profile.id == (settings.vpnSelectedProfileId.ifBlank { selected?.id })
+                        val isSelected = profile.id == settings.vpnSelectedProfileId
                         val isConnected = vpnState.profileId == profile.id && vpnState.isActive
                         VpnMiniRow(
                             profile = profile,

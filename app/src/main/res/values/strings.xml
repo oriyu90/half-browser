@@ -443,6 +443,9 @@
     <string name="vpn_unsaved_changes">You have unsaved changes.</string>
     <string name="vpn_discard">Discard</string>
     <string name="vpn_keep_editing">Keep editing</string>
+    <string name="vpn_error_name_blank">Enter a profile name.</string>
+    <string name="vpn_error_name_duplicate">A profile with this name already exists.</string>
+    <string name="vpn_profile_save_failed">The VPN profile could not be saved.</string>
 
     <!-- JavaScript attack protection -->
     <string name="settings_js_guard">Protect against hostile scripts</string>

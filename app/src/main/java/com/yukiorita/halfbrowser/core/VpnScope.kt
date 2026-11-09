@@ -1,5 +1,7 @@
 package com.yukiorita.halfbrowser.core
 
+import java.util.Locale
+
 /**
  * Rewrites a WireGuard configuration so that only Half-Browser is routed.
  *
@@ -65,8 +67,10 @@ object VpnScope {
                 continue
             }
             if (inInterface) {
-                val key = trimmed.substringBefore('=').trim().lowercase()
-                if (key == INCLUDED_KEY.lowercase() || key == EXCLUDED_KEY.lowercase()) continue
+                val key = trimmed.substringBefore('=').trim().lowercase(Locale.ROOT)
+                if (key == INCLUDED_KEY.lowercase(Locale.ROOT) ||
+                    key == EXCLUDED_KEY.lowercase(Locale.ROOT)
+                ) continue
             }
             out += line
         }

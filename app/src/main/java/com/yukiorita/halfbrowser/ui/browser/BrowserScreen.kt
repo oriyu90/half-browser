@@ -372,6 +372,18 @@ fun BrowserScreen(
         }
     }
 
+    // The JsGuard shim is injected at document start, so toggling the setting
+    // can only take effect on a fresh WebView. Same first-value-seen pattern
+    // as trustRevision above: bump the generation on change, never on entry.
+    var seenJsGuardEnabled by remember { mutableStateOf(settings.jsGuardEnabled) }
+    LaunchedEffect(settings.jsGuardEnabled) {
+        if (settings.jsGuardEnabled != seenJsGuardEnabled) {
+            seenJsGuardEnabled = settings.jsGuardEnabled
+            state.lastRequestedUrl = state.currentUrl.ifBlank { request.url }
+            state.generation += 1
+        }
+    }
+
     val activeBookmark = request.bookmarkId?.let { id -> bookmarks.firstOrNull { it.id == id } }
     // A page opened from a bookmark gets the compact, single-line chrome bar.
     val compactChrome = activeBookmark != null
@@ -1130,6 +1142,9 @@ fun BrowserScreen(
         onDispose {
             state.ssl?.cancel()
             state.auth?.cancel()
+            // Same pattern as ssl/auth above: an outstanding JS dialog must be
+            // settled, or its JsResult is never answered and the page hangs.
+            state.jsDialog?.settle(JsDialogResult.Dismiss)
             state.webView?.let { webView ->
                 runCatching {
                     webView.stopLoading()
@@ -1417,7 +1432,7 @@ private fun WebViewHost(
                         ),
                     )
                 })
-                installDocumentScripts(this)
+                installDocumentScripts(this, container.settings.current().jsGuardEnabled)
                 WebNotificationBridge(
                     context = context,
                     permissions = container.sitePermissions,
@@ -1713,20 +1728,28 @@ private data class FormLoginTarget(
  * Injects the compatibility shims before any page script runs. Without
  * DOCUMENT_START_SCRIPT support the page simply stays unsupported rather than
  * receiving a late, half-working polyfill.
+ *
+ * The JsGuard shim is part of this only while its setting is on: with
+ * jsGuardEnabled=false the native handlers defer to WebView's own dialogs, so
+ * injecting the shim anyway would warn the user about a protection they
+ * turned off.
  */
-private fun installDocumentScripts(webView: WebView) {
+private fun installDocumentScripts(webView: WebView, jsGuardEnabled: Boolean) {
     if (!WebViewFeature.isFeatureSupported(WebViewFeature.DOCUMENT_START_SCRIPT)) return
     // Order matters only in that each script must run before page code; they are
     // independent of one another (compatibility polyfills, keyboard modifier
     // guard, notification bridge).
-    listOf(
-        com.yukiorita.halfbrowser.core.WebCompat.POLYFILL_JS,
-        com.yukiorita.halfbrowser.core.KeyboardGuard.JS,
-        com.yukiorita.halfbrowser.core.WebNotify.JS,
-        // First line of defence against hostile page scripts. Injected before
-        // any page script, so a page cannot capture the native dialogs first.
-        com.yukiorita.halfbrowser.core.JsGuard.JS,
-    ).forEach { script ->
+    val scripts = buildList {
+        add(com.yukiorita.halfbrowser.core.WebCompat.POLYFILL_JS)
+        add(com.yukiorita.halfbrowser.core.KeyboardGuard.JS)
+        add(com.yukiorita.halfbrowser.core.WebNotify.JS)
+        if (jsGuardEnabled) {
+            // First line of defence against hostile page scripts. Injected before
+            // any page script, so a page cannot capture the native dialogs first.
+            add(com.yukiorita.halfbrowser.core.JsGuard.JS)
+        }
+    }
+    scripts.forEach { script ->
         runCatching { WebViewCompat.addDocumentStartJavaScript(webView, script, setOf("*")) }
     }
 }

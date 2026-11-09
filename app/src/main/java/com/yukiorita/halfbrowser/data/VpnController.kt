@@ -12,16 +12,17 @@ import com.wireguard.config.Config
 import com.yukiorita.halfbrowser.core.VpnConfigError
 import com.yukiorita.halfbrowser.core.VpnProfile
 import com.yukiorita.halfbrowser.core.VpnScope
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.withTimeoutOrNull
 import java.io.ByteArrayInputStream
 
 /**
@@ -45,6 +46,12 @@ import java.io.ByteArrayInputStream
  * Threading: every backend call runs on [Dispatchers.IO] because starting a
  * tunnel performs DNS resolution and a native hand-off. State is published on a
  * [StateFlow] that the Compose UI collects.
+ *
+ * Reconnect teardown: switch between tunnels waits for the actual DOWN callback
+ * (`ActiveTunnel.onStateChange(DOWN)`), not a fixed delay. GoBackend may invoke
+ * the callback synchronously on the thread calling `setState(DOWN)`, so the wait
+ * is structured to never block that thread: the DOWN completion is published
+ * through a [CompletableDeferred] and awaited with a timeout fallback.
  */
 class VpnController(
     private val context: Context,
@@ -76,13 +83,15 @@ class VpnController(
                 if (_state.value is VpnState.Connected || _state.value is VpnState.Connecting) {
                     // Tear the old tunnel down first so a profile switch cannot
                     // leave two interfaces (and two default routes) behind.
-                    disconnectInternal()
+                    val teardown = disconnectInternal()
                     // GoBackend calls stopSelf() when a tunnel goes down and only
                     // starts the service again once the destroyed instance has
                     // reset its static future. Bringing the next tunnel up before
                     // that race resolves makes the system destroy the *new*
-                    // tunnel a moment later, so wait for the teardown to settle.
-                    delay(SERVICE_TEARDOWN_MS)
+                    // tunnel a moment later, so wait until the old tunnel reports
+                    // DOWN (with a hard timeout fallback so a lost callback can
+                    // never wedge the reconnect).
+                    teardown?.let { awaitDown(it) }
                 }
                 _state.value = VpnState.Connecting(profile.id)
                 val result = runCatching { bringUp(profile) }
@@ -101,12 +110,16 @@ class VpnController(
     fun disconnect() {
         scope.launch {
             mutex.withLock {
+                // Disconnecting carries no profileId, so save it first: if the
+                // teardown fails, the Failed state must still identify the
+                // profile the user was trying to disconnect.
+                val previousProfileId = _state.value.profileId
                 _state.value = VpnState.Disconnecting
                 val result = runCatching { disconnectInternal() }
                 _state.value = if (result.isSuccess) {
                     VpnState.Disconnected
                 } else {
-                    VpnState.Failed(_state.value.profileId, VpnFailure.UNKNOWN)
+                    VpnState.Failed(previousProfileId, VpnFailure.UNKNOWN)
                 }
             }
         }
@@ -139,13 +152,6 @@ class VpnController(
         }
     }
 
-    /** Called when the app is leaving the foreground with the tunnel up. */
-    fun onAppStopped() {
-        // Kept connected: a download or an open page should not lose its route
-        // merely because the user switched apps. The system shows the VPN key
-        // icon, and the home screen shows the live state when they return.
-    }
-
     private fun bringUp(profile: VpnProfile) {
         val intent = VpnService.prepare(appContext)
         if (intent != null) {
@@ -153,27 +159,56 @@ class VpnController(
         }
         val config = parseScoped(profile.configText)
         val tunnel = ActiveTunnel(profile.id) { name, up ->
-            _state.value = if (up) {
-                VpnState.Connected(profile.id)
-            } else if (_state.value is VpnState.Connected) {
-                VpnState.Disconnected
-            } else {
-                _state.value
+            // GoBackend may call onStateChange synchronously on the thread that
+            // invoked setState() (possibly while this controller holds [mutex],
+            // e.g. inside disconnectInternal()). Updating state directly here
+            // would interleave with that locked section, and blocking here
+            // would deadlock. Publish asynchronously and only when this tunnel
+            // is still the active one, in declaration order per tunnel.
+            scope.launch {
+                synchronized(this@VpnController) {
+                    if (activeTunnel?.id != profile.id) return@synchronized
+                    _state.value = if (up) {
+                        VpnState.Connected(profile.id)
+                    } else if (_state.value is VpnState.Connected) {
+                        VpnState.Disconnected
+                    } else {
+                        _state.value
+                    }
+                }
+                Log.i(TAG, "tunnel $name ${if (up) "up" else "down"}")
             }
-            Log.i(TAG, "tunnel $name ${if (up) "up" else "down"}")
         }
         val engine = backend ?: GoBackend(appContext).also { backend = it }
         engine.setState(tunnel, Tunnel.State.UP, config)
         activeTunnel = tunnel
     }
 
-    private fun disconnectInternal() {
+    /**
+     * Tears the active tunnel down, if any, and returns a signal completed when
+     * the tunnel reports DOWN. The signal is completed by the tunnel's own
+     * onStateChange callback, which may fire synchronously inside the
+     * `setState(DOWN)` call below — no blocking happens on that thread.
+     * Returns null when there was no tunnel to tear down.
+     */
+    private fun disconnectInternal(): CompletableDeferred<Unit>? {
         val tunnel = activeTunnel
         val engine = backend
         activeTunnel = null
-        if (tunnel != null && engine != null) {
-            runCatching { engine.setState(tunnel, Tunnel.State.DOWN, null) }
-        }
+        if (tunnel == null || engine == null) return null
+        val down = CompletableDeferred<Unit>()
+        tunnel.onDown = { down.complete(Unit) }
+        runCatching { engine.setState(tunnel, Tunnel.State.DOWN, null) }
+        return down
+    }
+
+    /**
+     * Waits for [down] up to [TEARDOWN_TIMEOUT_MS], then proceeds regardless.
+     * The timeout guarantees the caller (holding [mutex]) can never be wedged
+     * by a tunnel whose DOWN callback never arrives.
+     */
+    private suspend fun awaitDown(down: CompletableDeferred<Unit>) {
+        withTimeoutOrNull(TEARDOWN_TIMEOUT_MS) { down.await() }
     }
 
     private fun classify(error: Throwable): VpnFailure = when (error) {
@@ -255,21 +290,33 @@ class VpnController(
     private class ConsentRequired : IllegalStateException("VPN consent required")
 
     private class ActiveTunnel(
-        private val id: String,
+        val id: String,
         private val onState: (String, Boolean) -> Unit,
     ) : Tunnel {
+        /**
+         * Completed when the tunnel reports DOWN. Assigned by the controller
+         * immediately before requesting teardown. Completed from onStateChange
+         * without blocking, so a synchronous callback from GoBackend can never
+         * deadlock the caller.
+         */
+        var onDown: (() -> Unit)? = null
+
         override fun getName(): String = com.yukiorita.halfbrowser.core.VpnNaming.tunnelNameFor(id)
 
         override fun onStateChange(newState: Tunnel.State) {
+            if (newState == Tunnel.State.DOWN) {
+                runCatching { onDown?.invoke() }
+            }
             runCatching { onState(getName(), newState == Tunnel.State.UP) }
         }
     }
 
     companion object {
         private const val TAG = "VpnController"
-        // Longer than the observed VpnService destroy latency; still short
-        // enough that a reconnect feels immediate.
-        private const val SERVICE_TEARDOWN_MS = 600L
+        // Fallback bound for waiting on the DOWN callback. The normal path
+        // completes as soon as the tunnel reports DOWN; this only covers a
+        // lost callback so reconnect can never hang forever.
+        private const val TEARDOWN_TIMEOUT_MS = 1500L
 
         /** Error text for [VpnConfigError] is resolved in the UI layer. */
         fun errorKey(error: VpnConfigError): String = error.name

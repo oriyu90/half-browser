@@ -75,6 +75,10 @@ internal class HalfBrowserWebViewClient(
     override fun onPageStarted(view: WebView?, url: String?, favicon: android.graphics.Bitmap?) {
         super.onPageStarted(view, url, favicon)
         loadingNavigation.started(url)
+        // The dialog budget is per page, not per WebView lifetime: without this
+        // reset a long-lived WebView would exhaust its dialogs on the first
+        // pages and silently drop every later page's dialogs.
+        state.dialogBudget.reset()
         onPageLoading(url)
         state.loading = true
         if (state.pendingAuthErrorUrl == null) state.error = null
@@ -420,8 +424,10 @@ internal class HalfBrowserChromeClient(
      * rate-limits dialogs inside the page, but a page that captured `alert`
      * before the shim installed — or that calls the callback path directly —
      * still reaches these handlers. This budget is the authoritative limit.
+     * It is owned by [BrowserState] and reset on every main-frame page start
+     * (see `onPageStarted`), so it is a per-page budget, not a per-WebView one.
      */
-    private val dialogs = com.yukiorita.halfbrowser.core.DialogBudget()
+    private val dialogs get() = state.dialogBudget
 
     private fun guardEnabled(): Boolean = container.settings.current().jsGuardEnabled
 
@@ -522,10 +528,8 @@ internal class HalfBrowserChromeClient(
         if (!guardEnabled()) return false
         if (!dialogs.allowBeforeUnload()) {
             runCatching { result.confirm() }
-            state.jsLeaveTrap = true
             return true
         }
-        state.jsLeaveTrap = false
         return false // WebView's own prompt is fine for the first attempts
     }
 

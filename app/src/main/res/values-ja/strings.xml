@@ -443,6 +443,9 @@
     <string name="vpn_unsaved_changes">保存されていない変更があります。</string>
     <string name="vpn_discard">破棄</string>
     <string name="vpn_keep_editing">編集を続ける</string>
+    <string name="vpn_error_name_blank">プロファイル名を入力してください。</string>
+    <string name="vpn_error_name_duplicate">この名前のプロファイルは既に存在します。</string>
+    <string name="vpn_profile_save_failed">VPN プロファイルを保存できませんでした。</string>
 
     <!-- JavaScript attack protection -->
     <string name="settings_js_guard">悪意あるスクリプトから保護する</string>

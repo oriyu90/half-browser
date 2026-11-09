@@ -2,8 +2,10 @@
 <data-extraction-rules>
     <cloud-backup>
         <exclude domain="sharedpref" path="halfbrowser_secure.xml" />
+        <exclude domain="sharedpref" path="halfbrowser_vpn.xml" />
     </cloud-backup>
     <device-transfer>
         <exclude domain="sharedpref" path="halfbrowser_secure.xml" />
+        <exclude domain="sharedpref" path="halfbrowser_vpn.xml" />
     </device-transfer>
 </data-extraction-rules>

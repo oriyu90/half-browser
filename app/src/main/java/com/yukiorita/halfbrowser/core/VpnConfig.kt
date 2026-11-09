@@ -2,6 +2,7 @@ package com.yukiorita.halfbrowser.core
 
 import kotlinx.serialization.Serializable
 import java.util.Base64
+import java.util.Locale
 
 /**
  * A WireGuard profile stored by Half-Browser.
@@ -118,11 +119,20 @@ object VpnConfigParser {
     const val MIN_MTU = 576
     const val MAX_MTU = 9000
 
-    /** Keys accepted in `[Interface]`. */
+    /** Plain unsigned decimal ("0", "1", "51820"); rejects "+8", "-0", "008". */
+    private val NUMERIC_TEXT = Regex("0|[1-9][0-9]*")
+
+    /**
+     * Keys accepted in `[Interface]`: exactly the set the WireGuard Android
+     * library (and official wg-quick) understands, plus the scope keys the
+     * library maps to `addAllowedApplication`/`addDisallowedApplication`.
+     * Amnezia/future keys (FwMark, PresharedKey in Interface, JunkPacket*,
+     * S1/S2, Jc, ...) are rejected with UNKNOWN_KEY: wg-quick does not
+     * support them and silently ignoring them would mislead the user.
+     */
     private val INTERFACE_KEYS = setOf(
-        "privatekey", "address", "dns", "listenport", "mtu", "fwmark",
-        "presharedkey", "s1", "s2", "junkpacketcount", "junkpacketmin",
-        "junkpacketmax", "initpacketjunkcount", "responsemode",
+        "privatekey", "address", "dns", "listenport", "mtu",
+        "excludedapplications", "includedapplications",
     )
 
     /** Keys accepted in `[Peer]`. */
@@ -132,6 +142,11 @@ object VpnConfigParser {
     )
 
     fun parse(raw: String): VpnConfigResult {
+        // Pre-normalization raw-length guard: normalize()/line handling on a
+        // multi-MB paste would allocate heavily before the byte check below.
+        if (raw.length > MAX_BYTES * 4) {
+            return VpnConfigResult.Error(VpnConfigError.TOO_LARGE)
+        }
         val text = normalize(raw)
         if (text.isBlank()) return VpnConfigResult.Error(VpnConfigError.EMPTY)
         if (text.toByteArray(Charsets.UTF_8).size > MAX_BYTES) {
@@ -153,7 +168,7 @@ object VpnConfigParser {
             val line = rawLine.substringBefore('#').substringBefore(';').trim()
             if (line.isEmpty()) continue
             if (line.startsWith("[")) {
-                when (line.lowercase()) {
+                when (line.lowercase(Locale.ROOT)) {
                     "[interface]" -> {
                         if (sawInterface) {
                             return VpnConfigResult.Error(VpnConfigError.DUPLICATE_SECTION, "[Interface]")
@@ -176,13 +191,13 @@ object VpnConfigParser {
             }
             val eq = line.indexOf('=')
             if (eq <= 0) return VpnConfigResult.Error(VpnConfigError.MALFORMED_LINE, line)
-            val key = line.substring(0, eq).trim().lowercase()
+            val key = line.substring(0, eq).trim().lowercase(Locale.ROOT)
             val value = line.substring(eq + 1).trim()
             when (section) {
                 "interface" -> when (key) {
                     "privatekey" -> {
                         if (privateKey != null) {
-                            return VpnConfigResult.Error(VpnConfigError.UNKNOWN_KEY, "duplicate PrivateKey")
+                            return VpnConfigResult.Error(VpnConfigError.MALFORMED_LINE, "duplicate PrivateKey")
                         }
                         if (!isWireGuardKey(value)) {
                             return VpnConfigResult.Error(VpnConfigError.INVALID_PRIVATE_KEY)
@@ -210,14 +225,14 @@ object VpnConfigParser {
                         dns += list
                     }
                     "listenport" -> {
-                        val port = value.toIntOrNull()
+                        val port = if (NUMERIC_TEXT.matches(value)) value.toIntOrNull() else null
                         if (port == null || port !in 1..65535) {
                             return VpnConfigResult.Error(VpnConfigError.INVALID_PORT, value)
                         }
                         listenPort = port
                     }
                     "mtu" -> {
-                        val parsed = value.toIntOrNull()
+                        val parsed = if (NUMERIC_TEXT.matches(value)) value.toIntOrNull() else null
                         if (parsed == null || parsed !in MIN_MTU..MAX_MTU) {
                             return VpnConfigResult.Error(VpnConfigError.INVALID_MTU, value)
                         }
@@ -259,7 +274,7 @@ object VpnConfigParser {
                             peer.endpoint = value
                         }
                         "persistentkeepalive" -> {
-                            val keepalive = value.toIntOrNull()
+                            val keepalive = if (NUMERIC_TEXT.matches(value)) value.toIntOrNull() else null
                             if (keepalive == null || keepalive !in 0..65535) {
                                 return VpnConfigResult.Error(
                                     VpnConfigError.INVALID_KEEPALIVE,
@@ -332,7 +347,11 @@ object VpnConfigParser {
         val slash = value.indexOf('/')
         if (slash <= 0 || slash == value.length - 1) return false
         val address = value.substring(0, slash)
-        val prefix = value.substring(slash + 1).toIntOrNull() ?: return false
+        val prefixText = value.substring(slash + 1)
+        // toIntOrNull() would happily accept "+8" / "-0"; the grammar only
+        // allows a plain unsigned decimal, so validate the shape first.
+        if (!NUMERIC_TEXT.matches(prefixText)) return false
+        val prefix = prefixText.toIntOrNull() ?: return false
         val maxBits = when {
             isIpv4(address) -> 32
             isIpv6(address) -> 128
@@ -363,6 +382,7 @@ object VpnConfigParser {
             if (host.contains(':')) return false
             if (!isIpv4(host) && !isHostname(host)) return false
         }
+        if (!NUMERIC_TEXT.matches(portText)) return false
         val port = portText.toIntOrNull() ?: return false
         return port in 1..65535
     }
@@ -395,23 +415,38 @@ object VpnConfigParser {
         if (doubleColon >= 0) {
             head = value.substring(0, doubleColon).split(':').filter { it.isNotEmpty() }
             tail = value.substring(doubleColon + 2).split(':').filter { it.isNotEmpty() }
-            if (head.size + tail.size > 7) return false
         } else {
             head = value.split(':')
             tail = emptyList()
-            if (head.size != 8) return false
+            // Without "::" the address is exactly 8 groups; an embedded IPv4
+            // counts as two, so 6 hex groups + IPv4 (7 parts) is also valid.
+            val embeddedCandidate = head.lastOrNull()?.contains('.') == true
+            val expectedParts = if (embeddedCandidate) 7 else 8
+            if (head.size != expectedParts) return false
         }
         val groups = head + tail
-        for (group in groups) {
+        // Embedded IPv4 (::ffff:1.2.3.4) occupies the last two 16-bit groups
+        // and is allowed only as the last "group". It is validated separately
+        // below, so it must be exempt from the hex-group check.
+        val hasEmbeddedIpv4 = groups.lastOrNull()?.contains('.') == true
+        for ((index, group) in groups.withIndex()) {
+            if (hasEmbeddedIpv4 && index == groups.lastIndex) continue
             if (group.isEmpty() || group.length > 4) return false
             if (!group.all { it.isDigit() || it in 'a'..'f' || it in 'A'..'F' }) return false
         }
-        // Embedded IPv4 (::ffff:1.2.3.4) is allowed only as the last group.
-        val last = groups.lastOrNull()
-        if (last != null && last.contains('.')) {
+        if (hasEmbeddedIpv4) {
             if (!isIpv4(value.substringAfterLast(':'))) return false
         }
-        return true
+        // Group-count budget: an embedded IPv4 counts as two groups. With
+        // "::", at most 7 plain groups (or 6 hex groups + the embedded IPv4,
+        // i.e. eight groups' worth) fit; without "::" the total must be
+        // exactly eight groups' worth (6 hex groups + the embedded IPv4).
+        val effectiveGroups = groups.size + if (hasEmbeddedIpv4) 1 else 0
+        return if (doubleColon >= 0) {
+            if (hasEmbeddedIpv4) effectiveGroups <= 8 else groups.size <= 7
+        } else {
+            effectiveGroups == 8
+        }
     }
 
     private fun isHostname(value: String): Boolean {

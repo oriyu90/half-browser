@@ -289,19 +289,88 @@ class VpnConfigTest {
 
     @Test
     fun `accepts advanced interface keys without surfacing them`() {
+        // Interface scope keys are the ones the WireGuard library expands into
+        // Builder.addAllowed/DisallowedApplication calls; they stay unknown to
+        // wg-quick itself but are meaningful to this app, so they are accepted.
         val raw = config().replace(
             "DNS = 1.1.1.1",
-            "DNS = 1.1.1.1\nFwMark = 0x1234\nJc = 3\nS1 = 10",
+            "DNS = 1.1.1.1\nIncludedApplications = com.example.app",
         )
-        // Jc is not a wg-quick key (it is AmneziaWG); it must be rejected rather
-        // than silently ignored, so the user learns the config will not work.
+        assertNotNull(ok(raw))
+        // AmneziaWG-style keys are not wg-quick keys; they must be rejected
+        // rather than silently ignored, so the user learns the config will
+        // not work.
+        assertEquals(
+            VpnConfigError.UNKNOWN_KEY,
+            error(config().replace("DNS = 1.1.1.1", "DNS = 1.1.1.1\nJc = 3")),
+        )
+        assertEquals(
+            VpnConfigError.UNKNOWN_KEY,
+            error(config().replace("DNS = 1.1.1.1", "DNS = 1.1.1.1\nS1 = 10")),
+        )
+    }
+
+    @Test
+    fun `rejects fwmark which wg-quick does not understand`() {
+        // FwMark is not a wg-quick key (it is an AmneziaWG extension); the
+        // official parser would reject it, so this parser must too.
+        val raw = config().replace("DNS = 1.1.1.1", "DNS = 1.1.1.1\nFwMark = 0x1234")
         assertEquals(VpnConfigError.UNKNOWN_KEY, error(raw))
     }
 
     @Test
-    fun `accepts fwmark which wg-quick understands`() {
-        val raw = config().replace("DNS = 1.1.1.1", "DNS = 1.1.1.1\nFwMark = 0x1234")
-        assertNotNull(ok(raw))
+    fun `rejects signed or zero padded numeric options`() {
+        // "+8" / "-0" are not plain unsigned decimals.
+        assertEquals(
+            VpnConfigError.INVALID_ADDRESS,
+            error(config().replace("10.0.0.2/32", "10.0.0.2/+8")),
+        )
+        assertEquals(
+            VpnConfigError.INVALID_ALLOWED_IPS,
+            error(config().replace("0.0.0.0/0", "0.0.0.0/-0")),
+        )
+        assertEquals(
+            VpnConfigError.INVALID_PORT,
+            error(config().replace("DNS = 1.1.1.1", "DNS = 1.1.1.1\nListenPort = +51820")),
+        )
+        assertEquals(
+            VpnConfigError.INVALID_ENDPOINT,
+            error(config().replace("vpn.example.com:51820", "vpn.example.com:+51820")),
+        )
+    }
+
+    @Test
+    fun `rejects duplicate private keys as malformed lines`() {
+        val raw = config().replace(
+            "PrivateKey = $privateKey",
+            "PrivateKey = $privateKey\nPrivateKey = ${key(0x55)}",
+        )
+        val result = VpnConfigParser.parse(raw)
+        assertTrue(result is VpnConfigResult.Error)
+        val err = result as VpnConfigResult.Error
+        assertEquals(VpnConfigError.MALFORMED_LINE, err.reason)
+        assertEquals("duplicate PrivateKey", err.detail)
+    }
+
+    @Test
+    fun `rejects oversized raw input before normalization`() {
+        val huge = "a".repeat(VpnConfigParser.MAX_BYTES * 4 + 1)
+        assertEquals(VpnConfigError.TOO_LARGE, error(huge))
+    }
+
+    @Test
+    fun `ipv6 group counts account for embedded ipv4`() {
+        // 6 hex groups + embedded IPv4 with "::" is the maximum (8 groups worth).
+        assertTrue(VpnConfigParser.isCidr("1:2:3:4:5:6::1.2.3.4/128"))
+        // 7 hex groups + embedded IPv4 would be 9 groups worth: reject.
+        assertFalse(VpnConfigParser.isCidr("1:2:3:4:5:6:7::1.2.3.4/128"))
+        // Without "::", exactly 6 hex groups + embedded IPv4.
+        assertTrue(VpnConfigParser.isCidr("1:2:3:4:5:6:1.2.3.4/128"))
+        assertFalse(VpnConfigParser.isCidr("1:2:3:4:5:1.2.3.4/128"))
+        // Plain forms still work.
+        assertTrue(VpnConfigParser.isCidr("1:2:3:4:5:6:7:8/128"))
+        assertTrue(VpnConfigParser.isCidr("::ffff:1.2.3.4/128"))
+        assertFalse(VpnConfigParser.isCidr("1:2:3:4:5:6:7:8:9/128"))
     }
 
     @Test

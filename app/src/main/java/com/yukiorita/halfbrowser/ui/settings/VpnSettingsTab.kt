@@ -140,6 +140,9 @@ internal fun VpnSettingsTab(container: AppContainer) {
             pendingConsent = profile
             val intent = container.vpn.consentIntent()
             if (intent == null) {
+                // No consent dialog to wait for: clear the pending marker so
+                // the Connect button is not disabled forever.
+                pendingConsent = null
                 container.vpn.connect(profile)
             } else {
                 consentLauncher.launch(intent)
@@ -179,6 +182,7 @@ internal fun VpnSettingsTab(container: AppContainer) {
                         }
                     },
                     enabled = profiles.isNotEmpty() &&
+                        pendingConsent == null &&
                         vpnState !is VpnState.Connecting &&
                         vpnState !is VpnState.Disconnecting,
                 ) {
@@ -304,15 +308,20 @@ internal fun VpnSettingsTab(container: AppContainer) {
             existingNames = profiles.filter { it.id != target.existing?.id }.map { it.name },
             onDismiss = { editing = null },
             onSave = { name, configText ->
+                // Returns null on success, otherwise the message the editor
+                // shows inline. Failures must NOT go through `message`: that
+                // dialog would stack on top of the editor the user is in.
                 val parsed = VpnConfigParser.parse(configText) as? VpnConfigResult.Ok
                 if (parsed == null) {
-                    message = configErrorText(context, VpnConfigParser.parse(configText) as VpnConfigResult.Error)
-                    return@VpnEditorDialog false
+                    return@VpnEditorDialog configErrorText(
+                        context,
+                        VpnConfigParser.parse(configText) as VpnConfigResult.Error,
+                    )
                 }
                 val now = System.currentTimeMillis()
                 val existing = target.existing
                 val profile = if (existing == null) {
-                    VpnProfile(
+                    val added = VpnProfile(
                         id = UUID.randomUUID().toString(),
                         name = name,
                         configText = parsed.config.source,
@@ -321,26 +330,43 @@ internal fun VpnSettingsTab(container: AppContainer) {
                         dns = parsed.config.dns,
                         createdAt = now,
                         updatedAt = now,
-                    ).also { container.vpnStore.add(it) }
+                    )
+                    // add() returns null at MAX_PROFILES and on a write
+                    // failure; neither may be reported as "saved".
+                    container.vpnStore.add(added) ?: return@VpnEditorDialog (
+                        if (profiles.size >= VpnStore.MAX_PROFILES) {
+                            context.getString(R.string.vpn_profile_limit, VpnStore.MAX_PROFILES)
+                        } else {
+                            context.getString(R.string.vpn_profile_save_failed)
+                        }
+                    )
                 } else {
-                    existing.copy(
+                    val updated = existing.copy(
                         name = name,
                         configText = parsed.config.source,
                         endpoint = parsed.config.endpoint,
                         addresses = parsed.config.addresses,
                         dns = parsed.config.dns,
                         updatedAt = now,
-                    ).also {
-                        container.vpnStore.update(it)
-                        container.vpn.onProfileUpdated(it)
+                    )
+                    if (!container.vpnStore.update(updated)) {
+                        return@VpnEditorDialog (
+                            if (container.vpnStore.find(updated.id) == null) {
+                                context.getString(R.string.vpn_failure_profile_missing)
+                            } else {
+                                context.getString(R.string.vpn_profile_save_failed)
+                            }
+                        )
                     }
+                    container.vpn.onProfileUpdated(updated)
+                    updated
                 }
                 if (settings.vpnSelectedProfileId.isBlank()) {
                     container.settings.update { it.copy(vpnSelectedProfileId = profile.id) }
                 }
                 editing = null
                 message = context.getString(R.string.vpn_profile_saved)
-                true
+                null
             },
         )
     }
@@ -519,13 +545,21 @@ private fun VpnEditorDialog(
     target: VpnEditorTarget,
     existingNames: List<String>,
     onDismiss: () -> Unit,
-    onSave: (name: String, config: String) -> Boolean,
+    /**
+     * Attempts the save; returns null on success or the message to show
+     * inline in the editor. Failures never open a second dialog on top of
+     * this one.
+     */
+    onSave: (name: String, config: String) -> String?,
 ) {
     var name by remember { mutableStateOf(target.name) }
     var config by remember { mutableStateOf(target.config) }
     var error by remember { mutableStateOf<String?>(null) }
     var confirmDiscard by remember { mutableStateOf(false) }
     val dirty = name != target.name || config != target.config
+    // Resolved here (composable scope) because onClick is not composable.
+    val blankNameError = stringResource(R.string.vpn_error_name_blank)
+    val duplicateNameError = stringResource(R.string.vpn_error_name_duplicate)
 
     fun requestDismiss() {
         if (dirty) confirmDiscard = true else onDismiss()
@@ -544,7 +578,7 @@ private fun VpnEditorDialog(
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 OutlinedTextField(
                     value = name,
-                    onValueChange = { name = it.take(VpnConfigParser.MAX_NAME_LENGTH) },
+                    onValueChange = { name = it.take(VpnConfigParser.MAX_NAME_LENGTH); error = null },
                     label = { Text(stringResource(R.string.vpn_profile_name)) },
                     placeholder = { Text(stringResource(R.string.vpn_profile_name_hint)) },
                     singleLine = true,
@@ -552,7 +586,7 @@ private fun VpnEditorDialog(
                 )
                 OutlinedTextField(
                     value = config,
-                    onValueChange = { config = it },
+                    onValueChange = { config = it; error = null },
                     label = { Text(stringResource(R.string.vpn_profile_config)) },
                     placeholder = {
                         Text(
@@ -580,14 +614,14 @@ private fun VpnEditorDialog(
                 onClick = {
                     val trimmedName = name.trim()
                     if (trimmedName.isBlank()) {
-                        error = null
+                        error = blankNameError
                         return@TextButton
                     }
                     if (existingNames.any { it.equals(trimmedName, ignoreCase = true) }) {
-                        error = null
+                        error = duplicateNameError
                         return@TextButton
                     }
-                    if (onSave(trimmedName, config)) error = null
+                    error = onSave(trimmedName, config)
                 },
             ) {
                 Text(stringResource(R.string.vpn_action_save))
