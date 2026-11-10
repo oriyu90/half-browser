@@ -8,6 +8,8 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -24,6 +26,7 @@ import androidx.compose.material.icons.filled.FileDownload
 import androidx.compose.material.icons.filled.FileUpload
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.PowerSettingsNew
+import androidx.compose.material.icons.filled.QrCode2
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -53,6 +56,8 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.journeyapps.barcodescanner.ScanContract
+import com.journeyapps.barcodescanner.ScanOptions
 import com.yukiorita.halfbrowser.AppContainer
 import com.yukiorita.halfbrowser.R
 import com.yukiorita.halfbrowser.core.VpnConfigError
@@ -73,6 +78,7 @@ import java.util.UUID
  * the compact version of the same state.
  */
 @Composable
+@OptIn(ExperimentalLayoutApi::class)
 internal fun VpnSettingsTab(container: AppContainer) {
     val context = LocalContext.current
     val profiles by container.vpnStore.profiles.collectAsStateWithLifecycle()
@@ -116,6 +122,29 @@ internal fun VpnSettingsTab(container: AppContainer) {
         editing = VpnEditorTarget(
             existing = null,
             name = VpnNaming.sanitizeDisplayName(fallbackName, "VPN"),
+            config = parsed.config.source,
+        )
+    }
+
+    val qrLauncher = rememberLauncherForActivityResult(
+        ScanContract(),
+    ) { result ->
+        val text = result.contents ?: return@rememberLauncherForActivityResult
+        if (text.length > VpnConfigParser.MAX_BYTES) {
+            message = context.getString(R.string.vpn_qr_failed)
+            return@rememberLauncherForActivityResult
+        }
+        // Same path as the file import: decode, then let the user review the
+        // whole config in the editor before anything is stored. A scan never
+        // connects or saves on its own.
+        val parsed = VpnConfigParser.parse(text)
+        if (parsed !is VpnConfigResult.Ok) {
+            message = configErrorText(context, parsed as VpnConfigResult.Error)
+            return@rememberLauncherForActivityResult
+        }
+        editing = VpnEditorTarget(
+            existing = null,
+            name = VpnNaming.sanitizeDisplayName(context.getString(R.string.vpn_qr_name), "VPN"),
             config = parsed.config.source,
         )
     }
@@ -256,7 +285,10 @@ internal fun VpnSettingsTab(container: AppContainer) {
                     )
                 }
             }
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            FlowRow(
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
                 OutlinedButton(
                     onClick = {
                         if (profiles.size >= VpnStore.MAX_PROFILES) {
@@ -274,6 +306,24 @@ internal fun VpnSettingsTab(container: AppContainer) {
                     Icon(Icons.Filled.FileUpload, contentDescription = null, modifier = Modifier.size(18.dp))
                     Spacer(Modifier.width(6.dp))
                     Text(stringResource(R.string.vpn_action_import))
+                }
+                OutlinedButton(
+                    onClick = {
+                        if (profiles.size >= VpnStore.MAX_PROFILES) {
+                            message = context.getString(R.string.vpn_profile_limit, VpnStore.MAX_PROFILES)
+                        } else {
+                            val options = ScanOptions()
+                                .setDesiredBarcodeFormats(ScanOptions.QR_CODE)
+                                .setPrompt(context.getString(R.string.vpn_scan_prompt))
+                                .setBeepEnabled(false)
+                                .setOrientationLocked(false)
+                            qrLauncher.launch(options)
+                        }
+                    },
+                ) {
+                    Icon(Icons.Filled.QrCode2, contentDescription = null, modifier = Modifier.size(18.dp))
+                    Spacer(Modifier.width(6.dp))
+                    Text(stringResource(R.string.vpn_action_scan_qr))
                 }
             }
         }

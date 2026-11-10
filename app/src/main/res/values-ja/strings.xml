@@ -380,6 +380,7 @@
     <string name="vpn_action_reconnect">再接続</string>
     <string name="vpn_action_add">VPN を追加</string>
     <string name="vpn_action_import">ファイルから読み込む</string>
+    <string name="vpn_action_scan_qr">QR コードをスキャン</string>
     <string name="vpn_action_export">書き出す</string>
     <string name="vpn_action_delete">削除</string>
     <string name="vpn_action_edit">編集</string>
@@ -404,6 +405,9 @@
     <string name="vpn_auto_connect">アプリ起動時に接続</string>
     <string name="vpn_auto_connect_desc">Half-Browser を開いたときに、選択中の VPN へ自動で接続します。</string>
     <string name="vpn_import_failed">ファイルを読み込めませんでした。</string>
+    <string name="vpn_qr_failed">QR コードを読み込めませんでした。</string>
+    <string name="vpn_qr_name">QR 読み込み</string>
+    <string name="vpn_scan_prompt">WireGuard の QR コードにカメラを向けてください。</string>
     <string name="vpn_export_done">設定を書き出しました。</string>
     <string name="vpn_export_failed">設定を書き出せませんでした。</string>
     <string name="vpn_failure_consent">Android が VPN 接続を許可しませんでした。</string>

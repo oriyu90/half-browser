@@ -12,8 +12,8 @@ android {
     applicationId = "com.yukiorita.halfbrowser"
     minSdk = 26
     targetSdk = 36
-    versionCode = 10
-    versionName = "1.6.1"
+    versionCode = 11
+    versionName = "1.7.0"
     resourceConfigurations += listOf("en", "ja")
   }
 
@@ -80,6 +80,11 @@ dependencies {
   // Userspace WireGuard (wireguard-go). The AAR ships libwg-go.so for every ABI
   // and merges its own VpnService; no root and no kernel module are required.
   implementation(libs.wireguard.tunnel)
+
+  // QR scan for VPN profile import. zxing-android-embedded bundles the camera
+  // activity and decoding without Google Play services; zxing core comes with
+  // it and is also used by the JVM round-trip test.
+  implementation(libs.zxing.embedded)
 
   debugImplementation(libs.androidx.compose.ui.tooling)
 

@@ -380,6 +380,7 @@
     <string name="vpn_action_reconnect">Reconnect</string>
     <string name="vpn_action_add">Add VPN</string>
     <string name="vpn_action_import">Import from file</string>
+    <string name="vpn_action_scan_qr">Scan QR code</string>
     <string name="vpn_action_export">Export</string>
     <string name="vpn_action_delete">Delete</string>
     <string name="vpn_action_edit">Edit</string>
@@ -404,6 +405,9 @@
     <string name="vpn_auto_connect">Connect when the app starts</string>
     <string name="vpn_auto_connect_desc">Reconnects the selected VPN when Half-Browser opens.</string>
     <string name="vpn_import_failed">Could not read that file.</string>
+    <string name="vpn_qr_failed">Could not read that QR code.</string>
+    <string name="vpn_qr_name">QR import</string>
+    <string name="vpn_scan_prompt">Point the camera at a WireGuard QR code.</string>
     <string name="vpn_export_done">Profile exported.</string>
     <string name="vpn_export_failed">Could not export the profile.</string>
     <string name="vpn_failure_consent">Android did not allow the VPN connection.</string>
