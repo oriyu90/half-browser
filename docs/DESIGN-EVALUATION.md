@@ -280,7 +280,7 @@ Always-on VPN が実際にはトンネルを立てていなかった欠陥を修
   （無限ループしない）。
 - **メモリ安全性**: 復元時にプロファイルを 1 件だけ読み込み、接続完了後に参照を保持しない。
   `VpnAlwaysOn` は純粋関数で I/O を持たない。
-- **品質指標**: JVM テスト **176 件 / 失敗 0**（`VpnAlwaysOnTest` 3 件を追加）、
+- **品質指標**: JVM テスト **180 件 / 失敗 0**（`VpnAlwaysOnTest` 7 件を追加）、
   lint **Error 0**。
 - **エミュレータ検証（API 36.1）**: Always-on 有効 → 再起動 → `VPN CONNECTED` 自動復元を
   `dumpsys connectivity` で確認（`Uids: {10224-10224, 20224-20224}`）。実 WireGuard 対向

@@ -193,7 +193,7 @@ Always-on VPN 復元と実 WireGuard ハンドシェイク E2E の検証。
 
 | # | 項目 | 結果 |
 |---|---|---|
-| 1 | JVM テスト 176 件（`VpnAlwaysOnTest` 3 件を追加） | PASS（失敗 0） |
+| 1 | JVM テスト 180 件（`VpnAlwaysOnTest` 7 件を追加） | PASS（失敗 0） |
 | 2 | `lintDebug` | Error 0 |
 | 3 | 署名付き release ビルド（R8） | 成功。証明書 SHA-256 `36153aed…22a0f37` |
 | 4 | Always-on 有効 → 再起動 → `dumpsys connectivity` に `VPN CONNECTED`（Half-Browser）が自動復元 | PASS |

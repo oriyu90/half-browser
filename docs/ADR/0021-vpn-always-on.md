@@ -57,7 +57,7 @@ Half-Browser はこのコールバックを一度も登録していなかった�
 
 ## 検証
 
-- JVM: `VpnAlwaysOnTest`（決定表 10 ケース）+ 既存 173 件 = **176 件 / 失敗 0**。
+- JVM: `VpnAlwaysOnTest`（決定表 7 ケース）+ 既存 173 件 = **180 件 / 失敗 0**。
 - lint: `lintDebug` Error 0。
 - 署名付き release ビルド（R8）: 成功。証明書 SHA-256 `36153aed…22a0f37`（v1.6.1 と同一鍵）。
 - エミュレータ（API 36.1、Medium_Phone_API_36.1）:
