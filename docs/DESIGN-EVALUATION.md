@@ -261,3 +261,33 @@ v1.6.0 に対する独立精査（2 体並行監査）で挙がった指摘を�
   （同一 zxing デコーダ）で担保。実機での QR 読み取り確認は v1.6.0 のハンドシェイク
   実機確認と併せて継続課題。
 - **判定**: **リリース可（PASS_WITH_NOTES）**。
+
+---
+
+## 13. v1.7.1 の追加設計評価（2026-11-10、Always-on VPN 復元）
+
+Always-on VPN が実際にはトンネルを立てていなかった欠陥を修正した（[ADR-0021](ADR/0021-vpn-always-on.md)）。
+
+- **セキュリティ／接続の正しさ**: `GoBackend.setAlwaysOnCallback` を `HalfBrowserApplication`
+  で登録し、システム起動パスでも Half-Browser のトンネルが実際に立ち上がるようになる。
+  ロックダウン有効時に再起動後も端末がオフラインにならない。復元対象は Settings で選択中の
+  プロファイルのみで、`VpnScope` による allow-list 書き換えを再利用するため「このアプリのみ」
+  が弱まることはない。Keystore 未アンロック時はリトライし、平文保存はしない。
+- **互換性**: 既存の接続・スコープ・保存経路は無変更。`VpnController` に `settings` を渡す
+  依存追加のみ。minSdk 26 / 4 ABI / 16KB 整合は v1.7.0 を継承。
+- **クラッシュ安全性**: 復元は `scope.launch` 内で実行し、Keystore 失敗は `Retry` で吸収。
+  リトライ上限（約 2 分）を超えた場合は諦めて次のアプリ起動時の自動接続に委ねる
+  （無限ループしない）。
+- **メモリ安全性**: 復元時にプロファイルを 1 件だけ読み込み、接続完了後に参照を保持しない。
+  `VpnAlwaysOn` は純粋関数で I/O を持たない。
+- **品質指標**: JVM テスト **176 件 / 失敗 0**（`VpnAlwaysOnTest` 3 件を追加）、
+  lint **Error 0**。
+- **エミュレータ検証（API 36.1）**: Always-on 有効 → 再起動 → `VPN CONNECTED` 自動復元を
+  `dumpsys connectivity` で確認（`Uids: {10224-10224, 20224-20224}`）。実 WireGuard 対向
+  （colima Docker、gRPC ポートフォワーダ経由）とのハンドシェイクが `wg show` で非ゼロ、
+  WebView で `http://10.8.0.1:8000` が `HALF-BROWSER-TUNNEL-E2E-OK` を表示、許可リスト外
+  UID（shell）からの到達はタイムアウト。FATAL 0。
+- **未検証（正直な記載）**: Keystore 未アンロック時のリトライはロジック上対応済みだが
+  実機での実測は未実施。実機（非エミュレータ）での Always-on 復元・ハンドシェイク確認は
+  引き続き残課題。
+- **判定**: **リリース可（PASS_WITH_NOTES）**。

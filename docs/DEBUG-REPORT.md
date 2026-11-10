@@ -184,3 +184,26 @@ QR コード取り込みの追加に伴う検証。
   バージョンでは描画に反映されないため）。デコード自体は JVM 往復テストで担保。
   実機確認は v1.6.0 からの WireGuard ハンドシェイク実機確認と同時に実施する。
 - QR 容量上限（約 2.9 KiB）を超える設定は QR 化不可（公式アプリと同じ制約）。
+
+---
+
+## 9. v1.7.1 検証（2026-11-10、エミュレータ API 36.1 / Medium_Phone_API_36.1）
+
+Always-on VPN 復元と実 WireGuard ハンドシェイク E2E の検証。
+
+| # | 項目 | 結果 |
+|---|---|---|
+| 1 | JVM テスト 176 件（`VpnAlwaysOnTest` 3 件を追加） | PASS（失敗 0） |
+| 2 | `lintDebug` | Error 0 |
+| 3 | 署名付き release ビルド（R8） | 成功。証明書 SHA-256 `36153aed…22a0f37` |
+| 4 | Always-on 有効 → 再起動 → `dumpsys connectivity` に `VPN CONNECTED`（Half-Browser）が自動復元 | PASS |
+| 5 | `dumpsys connectivity`: VPN ネットワークの `Uids: <{10224-10224, 20224-20224}>`（OwnerUid 10224） | 自 UID のみに適用を実証 |
+| 6 | 実 WireGuard 対向（colima Docker、gRPC ポートフォワーダ経由）とのハンドシェイク | `wg show` の `latest handshake` 非ゼロ、転送カウンタ増加 |
+| 7 | WebView で `http://10.8.0.1:8000` 読み込み → `HALF-BROWSER-TUNNEL-E2E-OK` 表示 | PASS |
+| 8 | 許可リスト外の UID（shell, uid 2000）からの `10.8.0.1:8000` 到達 | タイムアウト（他アプリはトンネル外） |
+| 9 | `logcat -d` の FATAL EXCEPTION | **0 件** |
+
+### 未実施・残課題
+
+- 実機（非エミュレータ）での Always-on 復元とハンドシェイク確認は引き続き残課題。
+- Keystore 未アンロック時のリトライ挙動はロジック上対応済みだが実機未測定。

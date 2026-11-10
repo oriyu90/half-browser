@@ -42,7 +42,7 @@ class AppContainer(context: Context) {
         FaviconRepository(appContext, bookmarks, siteFetcher, settings)
     }
     val vpnStore: VpnStore by lazy { VpnStore(appContext) }
-    val vpn: VpnController by lazy { VpnController(appContext, vpnStore) }
+    val vpn: VpnController by lazy { VpnController(appContext, vpnStore, settings) }
 
     private val _trustRevision = MutableStateFlow(0)
     /** Incremented when the user trusts/revokes a certificate in settings. */

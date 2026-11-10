@@ -1,6 +1,7 @@
 package com.yukiorita.halfbrowser
 
 import android.app.Application
+import com.wireguard.android.backend.GoBackend
 import com.yukiorita.halfbrowser.core.SiteWatch
 import com.yukiorita.halfbrowser.notifications.SiteNotifier
 import com.yukiorita.halfbrowser.notifications.WebNotificationBridge
@@ -12,6 +13,13 @@ class HalfBrowserApplication : Application() {
 
     override fun onCreate() {
         super.onCreate()
+        // Always-on VPN hook. The system can start the VPN service without the
+        // app UI (device boot, lockdown enforcement); without this callback the
+        // service would start and bring up nothing. Registration is static and
+        // cheap: no native library is loaded until a connect actually happens.
+        GoBackend.setAlwaysOnCallback {
+            runCatching { container.vpn.onAlwaysOnTriggered() }
+        }
         SiteNotifier.ensureChannel(this)
         WebNotificationBridge.ensureChannel(this)
         runCatching {

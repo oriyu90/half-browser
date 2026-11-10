@@ -9,6 +9,7 @@ import com.wireguard.android.backend.BackendException
 import com.wireguard.android.backend.GoBackend
 import com.wireguard.android.backend.Tunnel
 import com.wireguard.config.Config
+import com.yukiorita.halfbrowser.core.VpnAlwaysOn
 import com.yukiorita.halfbrowser.core.VpnConfigError
 import com.yukiorita.halfbrowser.core.VpnProfile
 import com.yukiorita.halfbrowser.core.VpnScope
@@ -16,6 +17,7 @@ import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -56,6 +58,7 @@ import java.io.ByteArrayInputStream
 class VpnController(
     private val context: Context,
     private val store: VpnStore,
+    private val settings: SettingsRepository,
 ) {
     private val appContext = context.applicationContext
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
@@ -142,6 +145,44 @@ class VpnController(
     /** Called when the profile is edited or deleted while it is active. */
     fun onProfileRemoved(id: String) {
         if (_state.value.profileId == id) disconnect()
+    }
+
+    /**
+     * Restores the tunnel after the system's Always-on VPN feature started the
+     * VPN service on its own (boot, connectivity event, app force-stop). The
+     * selected profile is re-established; nothing happens when there is no
+     * profile to restore. A system-enabled "always on" is authoritative: it
+     * does not require the in-app auto-connect switch.
+     */
+    fun onAlwaysOnTriggered() {
+        scope.launch {
+            for (delayMs in VpnAlwaysOn.RETRY_DELAYS_MS) {
+                if (delayMs > 0) delay(delayMs)
+                val selectedId = settings.current().vpnSelectedProfileId
+                val profiles = store.snapshot()
+                when (
+                    VpnAlwaysOn.decide(
+                        stateActive = _state.value.isActive,
+                        selectedProfileId = selectedId,
+                        profiles = profiles,
+                        storePersistent = store.isPersistent,
+                    )
+                ) {
+                    VpnAlwaysOn.Action.Connect -> {
+                        Log.i(TAG, "always-on VPN: restoring tunnel")
+                        val profile = store.find(selectedId)
+                        if (profile != null) connect(profile)
+                        return@launch
+                    }
+                    VpnAlwaysOn.Action.Retry -> continue
+                    VpnAlwaysOn.Action.Stop -> {
+                        Log.i(TAG, "always-on VPN: nothing to restore")
+                        return@launch
+                    }
+                }
+            }
+            Log.w(TAG, "always-on VPN: profile store never became readable")
+        }
     }
 
     fun onProfileUpdated(profile: VpnProfile) {
