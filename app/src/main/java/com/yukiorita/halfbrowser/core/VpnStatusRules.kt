@@ -46,6 +46,9 @@ object VpnStatusRules {
         reachability == VpnReachability.HEALTHY -> VpnStatusHeadline.CONNECTED
         reachability == VpnReachability.STALE || reachability == VpnReachability.UNREACHABLE ->
             VpnStatusHeadline.DEGRADED
+        // The OS says the tunnel is up but this process cannot read its
+        // handshake: say "checking", never "connected".
+        reachability == VpnReachability.TUNNEL_ONLY -> VpnStatusHeadline.VERIFYING
         else -> VpnStatusHeadline.VERIFYING
     }
 

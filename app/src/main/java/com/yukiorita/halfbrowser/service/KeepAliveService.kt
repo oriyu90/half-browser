@@ -35,7 +35,12 @@ class KeepAliveService : Service() {
             return START_NOT_STICKY
         }
         startInForeground()
-        return START_STICKY
+        // NOT sticky: this service exists only so the page on screen can keep
+        // producing notifications. If the process is killed there is no page to
+        // keep alive, and resurrecting the service would leave a permanent
+        // notification for a browser that is not open. BrowserScreen restarts it
+        // when a page is shown again.
+        return START_NOT_STICKY
     }
 
     private fun startInForeground() {

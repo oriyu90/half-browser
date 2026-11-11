@@ -105,6 +105,7 @@ internal fun vpnReachabilityLabel(reachability: VpnReachability): String = strin
         VpnReachability.HEALTHY -> R.string.vpn_reach_healthy
         VpnReachability.STALE -> R.string.vpn_reach_stale
         VpnReachability.UNREACHABLE -> R.string.vpn_reach_unreachable
+        VpnReachability.TUNNEL_ONLY -> R.string.vpn_reach_tunnel_only
     },
 )
 

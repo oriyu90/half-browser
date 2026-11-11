@@ -98,4 +98,15 @@ class VpnStatusRulesTest {
         assertEquals(VpnAge.DAYS(1), VpnStatusRules.ageText(86_400_000))
         assertNull(VpnStatusRules.ageText(-1))
     }
+
+    @Test
+    fun `tunnel only never claims connected`() {
+        // The OS says the tunnel is up but this process cannot read a handshake.
+        // Claiming "connected" would be the v1.7.0 bug all over again.
+        assertEquals(
+            VpnStatusHeadline.VERIFYING,
+            VpnStatusRules.headline(tunnelUp = true, reachability = VpnReachability.TUNNEL_ONLY),
+        )
+        assertFalse(VpnStatusRules.isWarning(VpnStatusHeadline.VERIFYING))
+    }
 }

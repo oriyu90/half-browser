@@ -36,14 +36,24 @@ import java.util.Locale
 object VpnTuning {
 
     const val DEFAULT_KEEPALIVE_SECONDS = 25
+
+    /**
+     * Keepalive used when the user turns on the power-saving option. Still
+     * inside the range WireGuard documents for NAT traversal, but long enough
+     * that a strict firewall can drop an idle mapping, hence opt-in.
+     */
+    const val POWER_SAVER_KEEPALIVE_SECONDS = 60
     const val DEFAULT_MTU = 1280
     const val MAX_DNS_SERVERS = 3
 
     /**
      * @param configText a validated WireGuard config
+     * @param keepaliveSeconds the keepalive to enforce (see [DEFAULT_KEEPALIVE_SECONDS]
+     *   and [POWER_SAVER_KEEPALIVE_SECONDS])
      * @return the same config with keepalive / MTU / DNS adjusted
      */
-    fun tune(configText: String): String {
+    fun tune(configText: String, keepaliveSeconds: Int = DEFAULT_KEEPALIVE_SECONDS): String {
+        val keepalive = keepaliveSeconds.coerceIn(1, 65_535)
         val lines = configText.replace("\r\n", "\n").replace('\r', '\n').split('\n')
         val out = ArrayList<String>(lines.size + 4)
         var section = ""
@@ -54,7 +64,7 @@ object VpnTuning {
 
         fun closePeer() {
             if (peerNeedsKeepalive) {
-                out += "PersistentKeepalive = $DEFAULT_KEEPALIVE_SECONDS"
+                out += "PersistentKeepalive = $keepalive"
                 peerNeedsKeepalive = false
             }
         }
@@ -90,7 +100,7 @@ object VpnTuning {
                 section == "[peer]" && key == "persistentkeepalive" -> {
                     val value = trimmed.substringAfter('=').trim()
                     out += if (value == "0") {
-                        "PersistentKeepalive = $DEFAULT_KEEPALIVE_SECONDS"
+                        "PersistentKeepalive = $keepalive"
                     } else {
                         line
                     }

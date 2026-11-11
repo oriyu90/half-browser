@@ -129,6 +129,14 @@ data class AppSettings(
      */
     val vpnAutoReconnect: Boolean = true,
     /**
+     * Send the WireGuard keepalive every 60 s instead of every 25 s.
+     *
+     * 25 s is the value WireGuard recommends behind NAT, so this trades a
+     * little robustness for battery and data (0.25 → 0.10 MiB/day). Off by
+     * default: a strict firewall can drop an idle tunnel at 60 s.
+     */
+    val vpnPowerSaver: Boolean = false,
+    /**
      * Defence against hostile in-page JavaScript (dialog rate limits, scripted
      * popups, `javascript:` navigation). On by default; the toggle exists for a
      * site that legitimately needs many dialogs.

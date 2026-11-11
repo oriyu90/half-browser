@@ -29,6 +29,24 @@ object VpnAlwaysOn {
      */
     val RETRY_DELAYS_MS = longArrayOf(0L, 5_000L, 15_000L, 30_000L, 60_000L)
 
+    /**
+     * True when the system has this app registered as an Always-on VPN.
+     *
+     * Read from `Settings.Secure.always_on_vpn_app`; the read is a plain
+     * settings lookup (no permission needed). Used only to decide whether the
+     * restart watchdog is worth scheduling — a user who never enabled it must
+     * not be woken up for it.
+     */
+    fun isSystemAlwaysOn(context: android.content.Context): Boolean = runCatching {
+        val expected = context.applicationContext.packageName
+        val value = android.provider.Settings.Secure.getString(
+            context.contentResolver,
+            "always_on_vpn_app",
+        )
+        // The value is the package name, sometimes followed by "!" and flags.
+        value != null && value.substringBefore('!') == expected
+    }.getOrDefault(false)
+
     sealed interface Action {
         /** Restore the tunnel for the selected profile right now. */
         data object Connect : Action

@@ -95,4 +95,28 @@ class VpnTuningTest {
     fun `empty input does not throw`() {
         assertEquals("MTU = 1280\n", VpnTuning.tune(""))
     }
+
+    @Test
+    fun `power saver uses a longer keepalive`() {
+        val tuned = VpnTuning.tune(base, VpnTuning.POWER_SAVER_KEEPALIVE_SECONDS)
+        assertTrue(tuned.contains("PersistentKeepalive = 60"))
+        assertFalse(tuned.contains("PersistentKeepalive = 25"))
+    }
+
+    @Test
+    fun `power saver also replaces an explicit zero keepalive`() {
+        val tuned = VpnTuning.tune(
+            base.replace("Endpoint = vpn.example.com:51820", "Endpoint = vpn.example.com:51820\nPersistentKeepalive = 0"),
+            VpnTuning.POWER_SAVER_KEEPALIVE_SECONDS,
+        )
+        assertTrue(tuned.contains("PersistentKeepalive = 60"))
+    }
+
+    @Test
+    fun `an out of range keepalive is clamped instead of throwing`() {
+        // Defensive: the value comes from a setting, never from the user's text,
+        // but a corrupt preference must not produce an invalid config.
+        assertTrue(VpnTuning.tune(base, 0).contains("PersistentKeepalive = 1"))
+        assertTrue(VpnTuning.tune(base, -5).contains("PersistentKeepalive = 1"))
+    }
 }

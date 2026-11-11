@@ -469,6 +469,7 @@
     <string name="vpn_reach_healthy">通信できています</string>
     <string name="vpn_reach_stale">最近 VPN から応答がありません</string>
     <string name="vpn_reach_unreachable">接続してから VPN から一度も応答がありません</string>
+    <string name="vpn_reach_tunnel_only">接続中です。ページを開いて動作を確認してください。</string>
     <string name="vpn_detail_title">VPN の状態</string>
     <string name="vpn_detail_profile">プロファイル</string>
     <string name="vpn_detail_reachability">疎通</string>
@@ -484,6 +485,9 @@
     <string name="vpn_age_hours">%1$d 時間前</string>
     <string name="vpn_age_days">%1$d 日前</string>
     <string name="vpn_auto_reconnect">応答が止まったら再接続する</string>
+    <string name="vpn_power_saver_card">電池</string>
+    <string name="vpn_power_saver">キープアライブの間隔を延ばす</string>
+    <string name="vpn_power_saver_desc">VPN のキープアライブを 25 秒ごとではなく 60 秒ごとに送ります（接続の種類は問いません）。電池と通信量を節約できますが、ファイアウォールの厳しい回線ではアイドル中に切断されることがあります。次に VPN へ接続したときから反映されます。</string>
     <string name="vpn_auto_reconnect_desc">Half-Browser を開いたときに VPN を確認し、応答していなければ再接続します。トンネルを通るのはこのアプリの通信だけです。</string>
     <string name="browser_error_timeout_title">ページがタイムアウトしました</string>
     <string name="browser_error_timeout_body">サーバーから時間内に応答がありませんでした。</string>

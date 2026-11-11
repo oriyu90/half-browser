@@ -469,6 +469,7 @@
     <string name="vpn_reach_healthy">Traffic is flowing</string>
     <string name="vpn_reach_stale">The VPN has not answered recently</string>
     <string name="vpn_reach_unreachable">The VPN has not answered since it connected</string>
+    <string name="vpn_reach_tunnel_only">Connected. Open a page to confirm it is working.</string>
     <string name="vpn_detail_title">VPN status</string>
     <string name="vpn_detail_profile">Profile</string>
     <string name="vpn_detail_reachability">Connection</string>
@@ -484,6 +485,9 @@
     <string name="vpn_age_hours">%1$d h ago</string>
     <string name="vpn_age_days">%1$d d ago</string>
     <string name="vpn_auto_reconnect">Reconnect when it stops responding</string>
+    <string name="vpn_power_saver_card">Battery</string>
+    <string name="vpn_power_saver">Send the keepalive less often</string>
+    <string name="vpn_power_saver_desc">Sends the VPN keepalive every 60 seconds instead of every 25, on any connection. Uses less battery and data, but a network with a strict firewall may drop the connection while it is idle. Applies from the next time the VPN connects.</string>
     <string name="vpn_auto_reconnect_desc">When Half-Browser opens, it checks the VPN and reconnects it if it is no longer answering. Only this app\'s traffic goes through the VPN.</string>
     <string name="browser_error_timeout_title">The page timed out</string>
     <string name="browser_error_timeout_body">The server did not respond in time.</string>

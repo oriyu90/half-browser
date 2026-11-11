@@ -363,6 +363,19 @@ internal fun VpnSettingsTab(container: AppContainer) {
                 },
             )
         }
+
+        // Its own card: this changes how the tunnel is built, not when it
+        // connects, so it does not belong under "connect on launch".
+        SettingsCard(title = stringResource(R.string.vpn_power_saver_card)) {
+            SettingsSwitchRow(
+                title = stringResource(R.string.vpn_power_saver),
+                description = stringResource(R.string.vpn_power_saver_desc),
+                checked = settings.vpnPowerSaver,
+                onCheckedChange = { enabled ->
+                    container.settings.update { it.copy(vpnPowerSaver = enabled) }
+                },
+            )
+        }
     }
 
     message?.let { text ->

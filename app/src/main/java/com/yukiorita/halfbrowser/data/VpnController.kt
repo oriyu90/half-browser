@@ -10,6 +10,7 @@ import com.wireguard.android.backend.GoBackend
 import com.wireguard.android.backend.Statistics
 import com.wireguard.android.backend.Tunnel
 import com.wireguard.config.Config
+import com.yukiorita.halfbrowser.BuildConfig
 import com.yukiorita.halfbrowser.core.VpnAlwaysOn
 import com.yukiorita.halfbrowser.core.VpnConfigError
 import com.yukiorita.halfbrowser.core.VpnHealthRules
@@ -72,6 +73,12 @@ class VpnController(
     private val store: VpnStore,
     private val settings: SettingsRepository,
     private val healthStore: VpnHealthStore? = null,
+    /**
+     * How to ask the OS whether our tunnel is still up. Injectable so the
+     * process-restart recovery path (which otherwise needs a real device) can be
+     * exercised from a unit test.
+     */
+    private val tunnelProbe: (Context) -> VpnTunnelProbe.State = VpnTunnelProbe::probe,
 ) {
     private val appContext = context.applicationContext
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
@@ -94,8 +101,37 @@ class VpnController(
     @Volatile
     private var generation: Long = 0L
 
-    /** Background poller for the handshake time while the app is in front. */
+    /** Background poller for the handshake time; runs while a tunnel is up. */
     private var poller: Job? = null
+
+    /**
+     * Whether the user can actually see the app: the activity is started **and**
+     * the screen is on.
+     *
+     * `MainActivity.onStop()` alone is not enough: turning the screen off does
+     * not call it, so a tunnel left connected in a pocket would otherwise be
+     * polled every few seconds forever. `ACTION_SCREEN_OFF` closes that gap.
+     *
+     * The two inputs are kept separately and combined on read, so the "screen
+     * off while the activity is resumed" case can never be lost to a
+     * read-modify-write race between the main and IO threads.
+     */
+    private val foreground = java.util.concurrent.atomic.AtomicBoolean(false)
+    private val screenOn = java.util.concurrent.atomic.AtomicBoolean(true)
+
+    /** Derived; never assigned directly. */
+    private val visible: Boolean get() = foreground.get() && screenOn.get()
+
+    /** Serialises poller start/stop so two triggers cannot leave two loops. */
+    private val pollerLock = Any()
+
+    /** Consecutive [VpnReachability.HEALTHY] observations, used for back-off. */
+    @Volatile
+    private var consecutiveHealthy: Int = 0
+
+    /** Set when the network changed; shortens the handshake grace once. */
+    @Volatile
+    private var networkChangedAt: Long = 0L
 
     /** Set while a user-initiated disconnect is in flight (blocks auto-reconnect). */
     @Volatile
@@ -146,7 +182,7 @@ class VpnController(
                 _reachability.value = VpnReachability.VERIFYING
                 val startedAt = System.currentTimeMillis()
                 val result = runCatching {
-                    bringUp(profile)
+                    bringUpWithRetry(profile)
                     startedAt
                 }
                 if (myGeneration != generation) {
@@ -156,7 +192,13 @@ class VpnController(
                     return@withLock
                 }
                 result.onFailure { error ->
-                    Log.w(TAG, "VPN connect failed: ${error.javaClass.simpleName}")
+                    // Include the backend reason: without it a failure is
+                    // undiagnosable from a bug report (BackendException carries
+                    // the reason as its message).
+                    val reason = (error as? BackendException)?.reason?.name
+                        ?: error.message?.take(120)
+                        ?: error.javaClass.simpleName
+                    Log.w(TAG, "VPN connect failed: ${error.javaClass.simpleName} ($reason)")
                     _state.value = VpnState.Failed(profile.id, classify(error))
                     _reachability.value = VpnReachability.UNKNOWN
                     healthStore?.clearSession()
@@ -174,7 +216,7 @@ class VpnController(
                     _reachability.value = VpnReachability.VERIFYING
                 }
             }
-            startPolling()
+            restartPolling()
         }
     }
 
@@ -285,6 +327,12 @@ class VpnController(
      * @param autoReconnect the user setting (`vpnAutoReconnect`)
      */
     fun onAppForeground(autoReconnect: Boolean) {
+        // Going through onVisible() (not a bare `visible = true`) is what makes
+        // the poller switch from the background back-off to the fast interval
+        // immediately; startPolling() alone would keep the old, long delay.
+        // verify = false: the branch below already verifies when connected, and
+        // two passes would each pay for a native wgGetConfig.
+        onVisible(verify = false)
         scope.launch {
             val current = _state.value
             if (current is VpnState.Connecting || current is VpnState.Disconnecting) {
@@ -325,9 +373,74 @@ class VpnController(
         }
     }
 
-    /** Called when the app goes to the background: stop the foreground poller. */
+    /**
+     * Called when the app goes to the background (or the screen turns off).
+     *
+     * The poller is **not** stopped: a tunnel left connected must still be
+     * noticed when it breaks. It drops to the back-off schedule instead, which
+     * is what makes "connected in a pocket" cheap.
+     */
     fun onAppBackground() {
-        stopPolling()
+        foreground.set(false)
+        // Restart so the new (slower) interval takes effect immediately instead
+        // of after the current foreground delay.
+        restartPolling()
+    }
+
+    /**
+     * The screen turned off. `Activity.onStop()` is **not** called for a screen
+     * off, so without this the foreground poll rate would continue indefinitely
+     * while the device sits in a pocket.
+     */
+    fun onScreenOff() {
+        screenOn.set(false)
+        restartPolling()
+    }
+
+    /**
+     * The screen turned on again. Verify once right away so the badge is
+     * accurate the moment the user looks at it, rather than after a back-off
+     * delay.
+     */
+    fun onScreenOn() {
+        screenOn.set(true)
+        onVisible()
+    }
+
+    /** Marks the app as visible and re-arms the fast poll schedule. */
+    private fun onVisible(verify: Boolean = true) {
+        val wasVisible = visible
+        foreground.set(true)
+        restartPolling()
+        if (verify && !wasVisible && visible && _state.value is VpnState.Connected) {
+            scope.launch { runCatching { verifyNow() } }
+        }
+    }
+
+    /**
+     * The default network changed (Wi-Fi ⇄ mobile, airplane mode, new endpoint).
+     *
+     * The UDP path is different now, so the existing handshake proves nothing.
+     * Verify once with a short grace period and reconnect when the tunnel is not
+     * answering — this is what makes the switch-over invisible to the user
+     * instead of waiting for the next poll or an app restart.
+     */
+    fun onNetworkChanged() {
+        Log.i(TAG, "network changed; re-verifying (state=${_state.value::class.simpleName})")
+        networkChangedAt = System.currentTimeMillis()
+        if (_state.value !is VpnState.Connected) {
+            // Nothing to re-verify, but a tunnel that the OS dropped while the
+            // network was gone should come back.
+            if (!userDisconnected && settings.current().vpnAutoReconnect) {
+                scope.launch { runCatching { verifyForBackground(settings.current().vpnAutoReconnect) } }
+            }
+            return
+        }
+        restartPolling()
+        scope.launch {
+            val observed = runCatching { verifyNow() }.getOrNull() ?: return@launch
+            maybeAutoReconnect(observed, settings.current().vpnAutoReconnect)
+        }
     }
 
     /**
@@ -365,8 +478,9 @@ class VpnController(
         }
         val observed = runBlockingVerify()
         val now = System.currentTimeMillis()
-        _reachability.value = observed
-        healthStore?.recordCheck(_health.value.lastHandshakeAt, observed, now)
+        val published = VpnHealthRules.publish(observed, _reachability.value)
+        _reachability.value = published
+        healthStore?.recordCheck(_health.value.lastHandshakeAt, published, now)
         if (VpnHealthRules.shouldAutoReconnect(
                 reachability = observed,
                 autoReconnect = autoReconnect,
@@ -386,30 +500,81 @@ class VpnController(
 
     // ---------------------------------------------------------------- internals
 
-    private fun startPolling() {
-        if (poller?.isActive == true) return
+    /**
+     * Runs the verification loop while a tunnel is up.
+     *
+     * The wait between passes comes from [VpnHealthRules.nextPollDelayMs], so the
+     * expensive part (`getStatistics` performs a native `wgGetConfig` and parses
+     * the whole config) runs at most every 10 s on screen and backs off to 5 min
+     * while the app is hidden and the tunnel is healthy.
+     */
+    private fun startPolling() = synchronized(pollerLock) {
+        if (poller?.isActive == true) return@synchronized
         poller = scope.launch {
             while (isActive) {
-                delay(VpnHealthRules.POLL_INTERVAL_MS)
+                val delayMs = VpnHealthRules.nextPollDelayMs(
+                    foreground = visible,
+                    reachability = _reachability.value,
+                    consecutiveHealthy = consecutiveHealthy,
+                )
+                delay(delayMs)
                 if (_state.value !is VpnState.Connected) break
                 runCatching { verifyNow() }
             }
         }
     }
 
-    private fun stopPolling() {
+    /** Wakes the poller immediately (after a network change or screen-on). */
+    private fun restartPolling() = synchronized(pollerLock) {
+        poller?.cancel()
+        poller = null
+        if (_state.value is VpnState.Connected) {
+            // startPolling() takes the same lock; it is re-entrant for the same
+            // thread, which is what makes this safe.
+            startPolling()
+        }
+    }
+
+    private fun stopPolling() = synchronized(pollerLock) {
         poller?.cancel()
         poller = null
     }
 
-    /** Reads the handshake time of the live tunnel and publishes the result. */
+    /**
+     * Reads the handshake time of the live tunnel and publishes the result.
+     *
+     * State is only re-published when something actually changed: assigning an
+     * identical value to a `StateFlow` still wakes every collector, and the UI
+     * collects both flows, so a blind assignment would re-compose the screen on
+     * every pass for no reason.
+     */
     private suspend fun verifyNow(): VpnReachability {
+        if (BuildConfig.DEBUG) {
+            // Debug-only instrumentation: makes the poll rate measurable with
+            // `adb logcat -s VpnPoll` instead of inferred from battery stats.
+            Log.d(POLL_TAG, "verify visible=$visible reach=${_reachability.value} healthy=$consecutiveHealthy")
+        }
         val observed = runBlockingVerify()
         val current = _state.value as? VpnState.Connected ?: return observed
         val now = System.currentTimeMillis()
-        val snapshot = _health.value.copy(profileId = current.profileId, checkedAt = now)
-        _health.value = snapshot
-        _reachability.value = observed
+        val previous = _health.value
+        val snapshot = previous.copy(profileId = current.profileId, checkedAt = now)
+        consecutiveHealthy = if (observed == VpnReachability.HEALTHY) {
+            (consecutiveHealthy + 1).coerceAtMost(VpnHealthRules.MAX_BACKOFF_STEPS)
+        } else {
+            0
+        }
+        // Publish when the handshake moved, and also when the "last check" line
+        // would otherwise freeze at the connect time; the latter is throttled to
+        // once a minute so the UI stays truthful without re-composing every pass.
+        val checkedMoved = snapshot.checkedAt - previous.checkedAt >= CHECKED_AT_PUBLISH_MS
+        if (snapshot.lastHandshakeAt != previous.lastHandshakeAt || checkedMoved) {
+            _health.value = snapshot
+        }
+        val next = VpnHealthRules.publish(observed, _reachability.value)
+        if (_reachability.value != next) {
+            _reachability.value = next
+        }
         healthStore?.recordCheck(snapshot.lastHandshakeAt, observed, now)
         return observed
     }
@@ -429,7 +594,31 @@ class VpnController(
     private fun runBlockingVerify(): VpnReachability {
         val tunnel = activeTunnel
         val engine = backend
-        if (tunnel == null || engine == null) return VpnReachability.UNKNOWN
+        if (tunnel == null || engine == null || tunnel.adopted) {
+            // No tunnel handle in this process. That is the normal state right
+            // after a process restart, where the OS may still hold a live
+            // tunnel. Returning UNKNOWN unconditionally would erase the
+            // TUNNEL_ONLY state ten seconds after adopting it and never
+            // re-verify, so ask the OS (cheap, no native call) instead.
+            if (_state.value !is VpnState.Connected) return VpnReachability.UNKNOWN
+            return when (tunnelProbe(appContext)) {
+                VpnTunnelProbe.State.ACTIVE -> VpnReachability.TUNNEL_ONLY
+                VpnTunnelProbe.State.INACTIVE -> {
+                    // The OS no longer has our tunnel: report it honestly.
+                    Log.i(TAG, "adopted tunnel is gone from the OS; treating as down")
+                    synchronized(this@VpnController) {
+                        if (activeTunnel == null || activeTunnel?.adopted == true) {
+                            activeTunnel = null
+                            _reachability.value = VpnReachability.UNKNOWN
+                            healthStore?.clearSession()
+                            _state.value = VpnState.Disconnected
+                        }
+                    }
+                    VpnReachability.UNKNOWN
+                }
+                VpnTunnelProbe.State.UNKNOWN -> VpnReachability.UNKNOWN
+            }
+        }
         val running = runCatching { engine.runningTunnelNames }.getOrNull()
         if (running != null && tunnel.getName() !in running) {
             Log.i(TAG, "tunnel ${tunnel.getName()} is no longer running; treating as down")
@@ -456,10 +645,13 @@ class VpnController(
             _health.value = _health.value.copy(lastHandshakeAt = handshake, checkedAt = now)
         }
         val current = _state.value as? VpnState.Connected ?: return VpnReachability.UNKNOWN
-        return VpnHealthRules.classify(
-            _health.value.copy(profileId = current.profileId, checkedAt = now),
-            now,
-        )
+        val snapshot = _health.value.copy(profileId = current.profileId, checkedAt = now)
+        // Right after a network change the handshake cannot have happened yet,
+        // so a stale handshake from the previous path would look like a failure
+        // and trigger a pointless reconnect. Handing the network-change moment
+        // to classify() re-arms the grace from that point, which is the only way
+        // a 10 s override can matter at all (the normal grace is longer).
+        return VpnHealthRules.classify(snapshot, now, graceStartOverride = networkChangedAt)
     }
 
     private fun maybeAutoReconnect(observed: VpnReachability, autoReconnect: Boolean) {
@@ -483,18 +675,45 @@ class VpnController(
      * was recreated while the VpnService kept running). Returns true when a
      * tunnel with the profile's name is actually running.
      *
-     * Honest limitation: the WireGuard library keeps its tunnel registry in
-     * process memory, so after a *process* death `runningTunnelNames` is empty
-     * even though the OS may still hold the interface. This method therefore
-     * cannot re-adopt across a process restart; [onAppForeground] reads the
-     * persisted session instead and reconnects, which also re-runs the
-     * handshake (the desired behaviour after a restart).
+     * The WireGuard library keeps its tunnel registry in process memory, so
+     * after a *process* death `runningTunnelNames` is empty even though the OS
+     * may still hold the interface. That is why the OS is asked next
+     * ([VpnTunnelProbe]): when it still owns a VPN network, the tunnel is
+     * reported as [VpnReachability.TUNNEL_ONLY] and **not** rebuilt — rebuilding
+     * would cost a needless DOWN→UP and a new handshake. Only when the OS also
+     * says the tunnel is gone is it re-established.
      */
     private fun adoptExistingTunnel(profile: VpnProfile): Boolean {
         val name = com.yukiorita.halfbrowser.core.VpnNaming.tunnelNameFor(profile.id)
         val engine = backend ?: GoBackend(appContext).also { backend = it }
         val running = runCatching { engine.runningTunnelNames }.getOrDefault(emptySet())
-        if (name !in running) return false
+        if (name !in running) {
+            // The library's registry is process-local, so a miss here does not
+            // prove the tunnel is gone. Ask the OS before tearing anything down:
+            // rebuilding a live tunnel costs a needless DOWN→UP and handshake.
+            if (tunnelProbe(appContext) == VpnTunnelProbe.State.ACTIVE) {
+                Log.i(TAG, "tunnel $name is alive in the OS but not readable here")
+                // Register a proxy handle even though statistics cannot be read
+                // through it. Without one, disconnectInternal() would have
+                // nothing to tear down and a later connect() would try to build
+                // a second tunnel with the same name, which fails.
+                activeTunnel = ActiveTunnel(profile.id, adopted = true) { tunnelName, up ->
+                    onTunnelState(tunnelName, up, profile.id)
+                }
+                _state.value = VpnState.Connected(profile.id)
+                _reachability.value = VpnReachability.TUNNEL_ONLY
+                // Keep the recorded session: the tunnel has been up since before
+                // this process existed, so overwriting connectedAt with "now"
+                // would claim it just started. Only start a session when the
+                // record does not already describe this profile.
+                val record = healthStore?.snapshot()
+                if (record == null || record.profileId != profile.id || record.connectedAt <= 0L) {
+                    healthStore?.startSession(profile.id, System.currentTimeMillis())
+                }
+                return true
+            }
+            return false
+        }
         activeTunnel = ActiveTunnel(profile.id) { tunnelName, up ->
             onTunnelState(tunnelName, up, profile.id)
         }
@@ -504,12 +723,47 @@ class VpnController(
         return true
     }
 
+    /**
+     * Brings the tunnel up, retrying briefly when the backend reports
+     * `UNABLE_TO_START_VPN`.
+     *
+     * That error means the GoBackend `VpnService` was not ready yet — typical
+     * right after the process is recreated (the service is started
+     * asynchronously) and after a network change. Without the retry an
+     * automatic reconnect can fail once and leave the user without a tunnel
+     * until the next trigger.
+     */
+    private suspend fun bringUpWithRetry(profile: VpnProfile) {
+        var lastError: Throwable? = null
+        for (attempt in 0 until BRING_UP_ATTEMPTS) {
+            if (attempt > 0) delay(BRING_UP_RETRY_DELAY_MS * attempt)
+            val error = runCatching { bringUp(profile) }.exceptionOrNull()
+            if (error == null) return
+            lastError = error
+            // Only "the service is not ready" is worth retrying. Consent,
+            // bad config and TUN failures are deterministic.
+            val retryable = (error as? BackendException)?.reason ==
+                BackendException.Reason.UNABLE_TO_START_VPN
+            if (!retryable) break
+            Log.i(TAG, "VPN service not ready (attempt ${attempt + 1}/$BRING_UP_ATTEMPTS); retrying")
+        }
+        throw lastError ?: IllegalStateException("tunnel did not start")
+    }
+
     private fun bringUp(profile: VpnProfile) {
         val intent = VpnService.prepare(appContext)
         if (intent != null) {
             throw ConsentRequired()
         }
         val config = parseScoped(profile.configText)
+        if (BuildConfig.DEBUG) {
+            // Proves which keepalive/MTU the tunnel was actually built with, so
+            // the power-saving option can be verified rather than assumed.
+            val keepalive = config.peers.joinToString(",") {
+                it.persistentKeepalive.orElse(-1).toString()
+            }
+            Log.d(POLL_TAG, "tunnel config: keepalive=[$keepalive] mtu=${config.`interface`.mtu.orElse(-1)}")
+        }
         val tunnel = ActiveTunnel(profile.id) { name, up -> onTunnelState(name, up, profile.id) }
         // Publish the tunnel *before* setState: GoBackend can call onStateChange
         // synchronously inside setState, and that callback is ignored unless this
@@ -613,7 +867,7 @@ class VpnController(
      */
     private fun parseScoped(configText: String): Config {
         val own = appContext.packageName
-        val tuned = VpnTuning.tune(configText)
+        val tuned = VpnTuning.tune(configText, keepaliveSeconds())
         // Primary: allow-list containing only this app.
         val included = runCatching {
             Config.parse(ByteArrayInputStream(
@@ -643,7 +897,15 @@ class VpnController(
     }
 
     internal fun withAppOnlyScope(configText: String): String =
-        VpnScope.applyAppOnlyScope(VpnTuning.tune(configText), appContext.packageName)
+        VpnScope.applyAppOnlyScope(VpnTuning.tune(configText, keepaliveSeconds()), appContext.packageName)
+
+    /** Keepalive the user's power-saving choice implies. */
+    private fun keepaliveSeconds(): Int =
+        if (settings.current().vpnPowerSaver) {
+            VpnTuning.POWER_SAVER_KEEPALIVE_SECONDS
+        } else {
+            VpnTuning.DEFAULT_KEEPALIVE_SECONDS
+        }
 
     private fun installedOtherPackages(): List<String> = runCatching {
         appContext.packageManager.getInstalledPackages(0)
@@ -661,6 +923,12 @@ class VpnController(
 
     private class ActiveTunnel(
         val id: String,
+        /**
+         * True when this handle only represents a tunnel that already existed in
+         * the OS (adopted after a process restart). `getStatistics` cannot read
+         * through it, so verification falls back to the OS probe.
+         */
+        val adopted: Boolean = false,
         private val onState: (String, Boolean) -> Unit,
     ) : Tunnel {
         /**
@@ -683,10 +951,22 @@ class VpnController(
 
     companion object {
         private const val TAG = "VpnController"
+
+        /** Debug-only counter tag for the verification loop. */
+        const val POLL_TAG = "VpnPoll"
         // Fallback bound for waiting on the DOWN callback. The normal path
         // completes as soon as the tunnel reports DOWN; this only covers a
         // lost callback so reconnect can never hang forever.
         private const val TEARDOWN_TIMEOUT_MS = 1500L
+
+        /** Attempts for a tunnel start that fails because the service is not ready. */
+        private const val BRING_UP_ATTEMPTS = 3
+
+        /** Linear back-off between those attempts. */
+        private const val BRING_UP_RETRY_DELAY_MS = 400L
+
+        /** How often the "last check" timestamp is published (see verifyNow). */
+        private const val CHECKED_AT_PUBLISH_MS = 60_000L
 
         /** Error text for [VpnConfigError] is resolved in the UI layer. */
         fun errorKey(error: VpnConfigError): String = error.name
