@@ -101,6 +101,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.withStyle
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.unit.dp
@@ -597,6 +598,10 @@ fun BrowserScreen(
                 state.error?.let { error ->
                     BrowserErrorPane(
                         error = error,
+                        onReconnectVpn = {
+                            container.vpn.reconnect()
+                            toast(context.getString(R.string.vpn_reconnect_started))
+                        },
                         onRetry = {
                             state.error = null
                             if (state.webView == null) {
@@ -1422,6 +1427,7 @@ private fun WebViewHost(
                     onPageReady = { url ->
                         if (!state.pageLoadRequested && url == loadingUrl) pageReady = true
                     },
+                    isVpnActive = { container.vpn.state.value.isActive },
                 )
                 webChromeClient = HalfBrowserChromeClient(state, container)
                 setDownloadListener(DownloadListener { url, _, contentDisposition, mimeType, _ ->
@@ -1469,7 +1475,11 @@ private fun WebViewHost(
 }
 
 @Composable
-private fun BrowserErrorPane(error: BrowserError, onRetry: () -> Unit) {
+private fun BrowserErrorPane(
+    error: BrowserError,
+    onRetry: () -> Unit,
+    onReconnectVpn: () -> Unit = {},
+) {
     Surface(
         modifier = Modifier.fillMaxSize(),
         color = MaterialTheme.colorScheme.background,
@@ -1493,6 +1503,7 @@ private fun BrowserErrorPane(error: BrowserError, onRetry: () -> Unit) {
                     when (error.kind) {
                         ErrorKind.AUTH -> R.string.browser_error_auth_title
                         ErrorKind.CERT -> R.string.ssl_title
+                        ErrorKind.TIMEOUT -> R.string.browser_error_timeout_title
                         ErrorKind.NETWORK -> R.string.browser_error_title
                     },
                 ),
@@ -1504,6 +1515,7 @@ private fun BrowserErrorPane(error: BrowserError, onRetry: () -> Unit) {
                     when (error.kind) {
                         ErrorKind.AUTH -> R.string.browser_error_auth_body
                         ErrorKind.CERT -> R.string.browser_error_cert_body
+                        ErrorKind.TIMEOUT -> R.string.browser_error_timeout_body
                         ErrorKind.NETWORK -> R.string.browser_error_body
                     },
                 ),
@@ -1528,8 +1540,26 @@ private fun BrowserErrorPane(error: BrowserError, onRetry: () -> Unit) {
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
+            if (error.vpnActive) {
+                // The tunnel is up but the page timed out: a stale WireGuard
+                // session is the usual cause, so offer the fix right here.
+                Spacer(Modifier.height(16.dp))
+                Text(
+                    text = stringResource(R.string.browser_error_vpn_hint),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    textAlign = TextAlign.Center,
+                )
+            }
             Spacer(Modifier.height(24.dp))
-            Button(onClick = onRetry) { Text(stringResource(R.string.action_retry)) }
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                if (error.vpnActive) {
+                    OutlinedButton(onClick = onReconnectVpn) {
+                        Text(stringResource(R.string.browser_error_vpn_reconnect))
+                    }
+                }
+                Button(onClick = onRetry) { Text(stringResource(R.string.action_retry)) }
+            }
         }
     }
 }

@@ -68,7 +68,7 @@ class BrowserState {
 
 }
 
-enum class ErrorKind { NETWORK, AUTH, CERT }
+enum class ErrorKind { NETWORK, AUTH, CERT, TIMEOUT }
 
 class FileChooserRequest(
     val params: WebChromeClient.FileChooserParams,
@@ -140,6 +140,12 @@ data class BrowserError(
     val description: String?,
     val failingUrl: String?,
     val kind: ErrorKind = ErrorKind.NETWORK,
+    /**
+     * True when the failure happened while the in-app VPN was up. The error
+     * pane then offers a reconnect, because a stale tunnel is the most common
+     * cause of a timeout in this app.
+     */
+    val vpnActive: Boolean = false,
 )
 
 /**

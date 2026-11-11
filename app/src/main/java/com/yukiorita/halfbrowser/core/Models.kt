@@ -110,8 +110,24 @@ data class AppSettings(
      * a deleted profile simply leaves the panel without a selection.
      */
     val vpnSelectedProfileId: String = "",
-    /** Reconnect automatically when the app starts with a profile selected. */
+    /**
+     * Connect the selected profile automatically on launch, even when no tunnel
+     * is running (e.g. after the user disconnected, or after a reboot).
+     *
+     * [vpnAutoReconnect] restores a tunnel that *was* running; this one starts
+     * one on every launch. Neither ever shows a system dialog: they only run
+     * when the user already granted VPN consent. When both are on, the
+     * reconnect path wins and this one does nothing extra.
+     */
     val vpnAutoConnect: Boolean = false,
+    /**
+     * After the app comes back to the foreground (or a background check runs),
+     * verify the tunnel's handshake and reconnect it when it went stale — the
+     * "the VPN says connected after sleep but nothing loads" case. On by
+     * default because it never shows a system dialog: it only runs when the
+     * user already granted VPN consent.
+     */
+    val vpnAutoReconnect: Boolean = true,
     /**
      * Defence against hostile in-page JavaScript (dialog rate limits, scripted
      * popups, `javascript:` navigation). On by default; the toggle exists for a

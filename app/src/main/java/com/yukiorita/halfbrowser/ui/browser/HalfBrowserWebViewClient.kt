@@ -50,6 +50,8 @@ internal class HalfBrowserWebViewClient(
     private val showToast: (String) -> Unit,
     private val onPageLoading: (String?) -> Unit,
     private val onPageReady: (String?) -> Unit,
+    /** True while the in-app VPN tunnel is up (used to explain timeouts). */
+    private val isVpnActive: () -> Boolean = { false },
 ) : WebViewClient() {
 
     /** scheme://host:port|realm -> number of silent attempts in this screen. */
@@ -306,10 +308,24 @@ internal class HalfBrowserWebViewClient(
         // generic error page behind it.
         if (state.ssl != null) return
         state.loading = false
+        val code = error?.errorCode ?: 0
         state.error = BrowserError(
             description = error?.description?.toString(),
             failingUrl = request.url?.toString(),
+            // A timeout is the signature of "the VPN is up but nothing flows";
+            // keep it distinct so the pane can explain and offer a reconnect.
+            kind = if (code == ERROR_TIMED_OUT_CODE) ErrorKind.TIMEOUT else ErrorKind.NETWORK,
+            vpnActive = isVpnActive(),
         )
+    }
+
+    private companion object {
+        /**
+         * `WebViewClient.ERROR_TIMED_OUT`. Spelled out because the constant is
+         * inherited from the Java superclass and is not reliably importable in
+         * Kotlin; the value is stable in the Android SDK.
+         */
+        const val ERROR_TIMED_OUT_CODE = -8
     }
 
     override fun onReceivedClientCertRequest(view: WebView?, request: ClientCertRequest?) {

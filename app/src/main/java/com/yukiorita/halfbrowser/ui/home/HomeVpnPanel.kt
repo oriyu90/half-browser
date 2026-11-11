@@ -8,17 +8,18 @@ import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
@@ -29,7 +30,6 @@ import androidx.compose.material.icons.filled.PowerSettingsNew
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Shield
-import androidx.compose.material.icons.filled.ShieldMoon
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
@@ -65,7 +65,9 @@ import com.yukiorita.halfbrowser.ui.settings.failureText
  * Compact VPN panel pinned to the bottom of the home screen.
  *
  * It is the place the user actually connects from, so it shows:
- *  - the live status (dot + text) of the tunnel;
+ *  - a status badge that distinguishes "tunnel up" from "traffic flowing"
+ *    (green only after a handshake, amber while verifying, "not responding"
+ *    when the server went silent); tapping it opens the detail sheet;
  *  - connect / disconnect, and reconnect while connected;
  *  - the registered profiles, expandable, with the active one marked.
  *
@@ -81,9 +83,15 @@ internal fun HomeVpnPanel(
     val context = LocalContext.current
     val profiles by container.vpnStore.profiles.collectAsStateWithLifecycle()
     val vpnState by container.vpn.state.collectAsStateWithLifecycle()
+    val reachability by container.vpn.reachability.collectAsStateWithLifecycle()
     val settings by container.settings.settings.collectAsStateWithLifecycle()
 
+    // Whether the system consent was already granted; a system query, so it is
+    // read once per composition rather than on every recomposition.
+    val consentGranted = remember { !container.vpn.needsSystemConsent() }
+
     var expanded by rememberSaveable { mutableStateOf(false) }
+    var showDetails by rememberSaveable { mutableStateOf(false) }
     var pendingConsent by remember { mutableStateOf<VpnProfile?>(null) }
     var notice by remember { mutableStateOf<String?>(null) }
 
@@ -138,41 +146,37 @@ internal fun HomeVpnPanel(
     ) {
         Column(modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(
-                    imageVector = if (vpnState.isActive) Icons.Filled.Shield else Icons.Filled.ShieldMoon,
-                    contentDescription = null,
-                    modifier = Modifier.size(20.dp),
-                    tint = statusColor(vpnState),
-                )
-                Spacer(Modifier.width(8.dp))
+                // The badge is the answer to "is my traffic going through the
+                // VPN right now?": it turns green only when a handshake has
+                // completed, amber while verifying, and shows "not responding"
+                // when the tunnel is up but the server went silent.
                 Column(modifier = Modifier.weight(1f)) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Spacer(
-                            Modifier
-                                .size(8.dp)
-                                .clip(CircleShape)
-                                .background(statusColor(vpnState)),
+                    Box(
+                        modifier = Modifier.clickable { showDetails = true },
+                    ) {
+                        HomeVpnBadge(
+                            state = vpnState,
+                            reachability = reachability,
+                            autoReconnect = settings.vpnAutoReconnect,
+                            consentGranted = consentGranted,
+                            profileName = when {
+                                connectedProfile != null -> connectedProfile.name
+                                profiles.isEmpty() -> null
+                                selected != null -> selected.name
+                                else -> null
+                            },
                         )
-                        Spacer(Modifier.width(6.dp))
+                    }
+                    if (profiles.isEmpty()) {
+                        Spacer(Modifier.height(2.dp))
                         Text(
-                            text = statusLabel(vpnState, connectedProfile?.name),
-                            style = MaterialTheme.typography.labelLarge,
-                            color = statusColor(vpnState),
+                            text = stringResource(R.string.vpn_home_not_configured),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis,
                         )
                     }
-                    Text(
-                        text = when {
-                            profiles.isEmpty() -> stringResource(R.string.vpn_home_not_configured)
-                            selected != null -> selected.name
-                            else -> stringResource(R.string.vpn_home_no_selection)
-                        },
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
                 }
 
                 if (busy) {
@@ -304,6 +308,17 @@ internal fun HomeVpnPanel(
             }
         }
     }
+
+    if (showDetails) {
+        VpnDetailSheet(
+            container = container,
+            onDismiss = { showDetails = false },
+            onOpenSettings = {
+                showDetails = false
+                onOpenSettings()
+            },
+        )
+    }
 }
 
 @Composable
@@ -361,22 +376,4 @@ private fun VpnMiniRow(
             )
         }
     }
-}
-
-@Composable
-private fun statusLabel(state: VpnState, name: String?): String = when (state) {
-    is VpnState.Connected ->
-        if (name != null) stringResource(R.string.vpn_status_connected_to, name) else stringResource(R.string.vpn_status_connected)
-    is VpnState.Connecting -> stringResource(R.string.vpn_status_connecting)
-    is VpnState.Disconnecting -> stringResource(R.string.vpn_status_disconnecting)
-    is VpnState.Failed -> stringResource(R.string.vpn_status_failed)
-    VpnState.Disconnected -> stringResource(R.string.vpn_status_disconnected)
-}
-
-@Composable
-private fun statusColor(state: VpnState): Color = when (state) {
-    is VpnState.Connected -> MaterialTheme.colorScheme.primary
-    is VpnState.Connecting, is VpnState.Disconnecting -> MaterialTheme.colorScheme.tertiary
-    is VpnState.Failed -> MaterialTheme.colorScheme.error
-    VpnState.Disconnected -> MaterialTheme.colorScheme.outline
 }

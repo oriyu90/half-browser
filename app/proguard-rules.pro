@@ -30,4 +30,7 @@
 -keep class * extends androidx.room.RoomDatabase { <init>(); }
 -keepclassmembers class * extends androidx.room.RoomDatabase { <init>(); }
 -dontwarn androidx.room.**
+# Every Worker is instantiated reflectively by WorkManager, so each one needs its
+# constructor kept. Listing them explicitly (not a wildcard) documents intent.
 -keep class com.yukiorita.halfbrowser.work.SiteWatchWorker { <init>(...); }
+-keep class com.yukiorita.halfbrowser.work.VpnHealthWorker { <init>(...); }

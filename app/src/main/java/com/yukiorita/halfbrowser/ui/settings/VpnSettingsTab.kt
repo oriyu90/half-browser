@@ -61,6 +61,9 @@ import com.journeyapps.barcodescanner.ScanOptions
 import com.yukiorita.halfbrowser.AppContainer
 import com.yukiorita.halfbrowser.R
 import com.yukiorita.halfbrowser.core.VpnConfigError
+import com.yukiorita.halfbrowser.core.VpnHealthSnapshot
+import com.yukiorita.halfbrowser.core.VpnReachability
+import com.yukiorita.halfbrowser.core.VpnStatusRules
 import com.yukiorita.halfbrowser.core.VpnConfigParser
 import com.yukiorita.halfbrowser.core.VpnConfigResult
 import com.yukiorita.halfbrowser.core.VpnNaming
@@ -68,6 +71,11 @@ import com.yukiorita.halfbrowser.core.VpnProfile
 import com.yukiorita.halfbrowser.data.VpnFailure
 import com.yukiorita.halfbrowser.data.VpnState
 import com.yukiorita.halfbrowser.data.VpnStore
+import com.yukiorita.halfbrowser.ui.home.headlineFor
+import com.yukiorita.halfbrowser.ui.home.vpnAgeLabel
+import com.yukiorita.halfbrowser.ui.home.vpnReachabilityLabel
+import com.yukiorita.halfbrowser.ui.home.vpnStatusColor
+import com.yukiorita.halfbrowser.ui.home.vpnStatusLabel
 import java.util.UUID
 
 /**
@@ -83,12 +91,17 @@ internal fun VpnSettingsTab(container: AppContainer) {
     val context = LocalContext.current
     val profiles by container.vpnStore.profiles.collectAsStateWithLifecycle()
     val vpnState by container.vpn.state.collectAsStateWithLifecycle()
+    val reachability by container.vpn.reachability.collectAsStateWithLifecycle()
+    val health by container.vpn.health.collectAsStateWithLifecycle()
     val settings by container.settings.settings.collectAsStateWithLifecycle()
 
     var editing by remember { mutableStateOf<VpnEditorTarget?>(null) }
     var deleting by remember { mutableStateOf<VpnProfile?>(null) }
     var message by remember { mutableStateOf<String?>(null) }
     var pendingConsent by remember { mutableStateOf<VpnProfile?>(null) }
+    // A system query (`VpnService.prepare()`), so it is read once per
+    // composition rather than on every recomposition.
+    val consentGranted = remember { !container.vpn.needsSystemConsent() }
     var exportTarget by remember { mutableStateOf<VpnProfile?>(null) }
 
     val consentLauncher = rememberLauncherForActivityResult(
@@ -195,8 +208,12 @@ internal fun VpnSettingsTab(container: AppContainer) {
             )
             VpnStatusRow(
                 state = vpnState,
+                reachability = reachability,
+                health = health,
                 profiles = profiles,
                 selectedId = settings.vpnSelectedProfileId,
+                autoReconnect = settings.vpnAutoReconnect,
+                consentGranted = consentGranted,
             )
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 Button(
@@ -337,6 +354,14 @@ internal fun VpnSettingsTab(container: AppContainer) {
                     container.settings.update { it.copy(vpnAutoConnect = enabled) }
                 },
             )
+            SettingsSwitchRow(
+                title = stringResource(R.string.vpn_auto_reconnect),
+                description = stringResource(R.string.vpn_auto_reconnect_desc),
+                checked = settings.vpnAutoReconnect,
+                onCheckedChange = { enabled ->
+                    container.settings.update { it.copy(vpnAutoReconnect = enabled) }
+                },
+            )
         }
     }
 
@@ -464,41 +489,58 @@ internal data class VpnEditorTarget(
 @Composable
 private fun VpnStatusRow(
     state: VpnState,
+    reachability: VpnReachability,
+    health: VpnHealthSnapshot,
     profiles: List<VpnProfile>,
     selectedId: String,
+    autoReconnect: Boolean,
+    consentGranted: Boolean,
 ) {
-    val (color, label) = when (state) {
-        is VpnState.Connected -> {
-            val name = profiles.firstOrNull { it.id == state.profileId }?.name
-            MaterialTheme.colorScheme.primary to if (name != null) {
-                stringResource(R.string.vpn_status_connected_to, name)
-            } else {
-                stringResource(R.string.vpn_status_connected)
+    val headline = headlineFor(state, reachability, autoReconnect, consentGranted)
+    val color = vpnStatusColor(headline)
+    val profileName = profiles.firstOrNull { it.id == state.profileId }?.name
+    val label = if (state is VpnState.Connected && profileName != null) {
+        stringResource(R.string.vpn_status_connected_to, profileName)
+    } else {
+        vpnStatusLabel(headline)
+    }
+    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Spacer(
+                Modifier
+                    .size(10.dp)
+                    .clip(CircleShape)
+                    .background(color),
+            )
+            Spacer(Modifier.width(8.dp))
+            Text(text = label, style = MaterialTheme.typography.bodyMedium, color = color)
+            if (state is VpnState.Disconnected && selectedId.isNotBlank() &&
+                profiles.none { it.id == selectedId }
+            ) {
+                Spacer(Modifier.width(8.dp))
+                Text(
+                    text = stringResource(R.string.vpn_home_no_selection),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
             }
         }
-        is VpnState.Connecting -> MaterialTheme.colorScheme.tertiary to stringResource(R.string.vpn_status_connecting)
-        is VpnState.Disconnecting -> MaterialTheme.colorScheme.tertiary to stringResource(R.string.vpn_status_disconnecting)
-        is VpnState.Failed -> MaterialTheme.colorScheme.error to stringResource(R.string.vpn_status_failed)
-        VpnState.Disconnected -> MaterialTheme.colorScheme.outline to stringResource(R.string.vpn_status_disconnected)
-    }
-    Row(verticalAlignment = Alignment.CenterVertically) {
-        Spacer(
-            Modifier
-                .size(10.dp)
-                .clip(CircleShape)
-                .background(color),
-        )
-        Spacer(Modifier.width(8.dp))
-        Text(text = label, style = MaterialTheme.typography.bodyMedium, color = color)
-        if (state is VpnState.Disconnected && selectedId.isNotBlank() &&
-            profiles.none { it.id == selectedId }
-        ) {
-            Spacer(Modifier.width(8.dp))
+        if (state is VpnState.Connected) {
+            // Reachability is the honest part: "connected" alone does not mean
+            // the server is answering.
             Text(
-                text = stringResource(R.string.vpn_home_no_selection),
+                text = vpnReachabilityLabel(reachability),
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
+            val lastCheck = vpnAgeLabel(health.checkedAt, System.currentTimeMillis())
+            if (lastCheck != null) {
+                Text(
+                    text = stringResource(R.string.vpn_detail_checked_value, lastCheck),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
         }
     }
 }

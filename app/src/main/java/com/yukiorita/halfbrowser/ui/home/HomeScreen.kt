@@ -121,12 +121,20 @@ fun HomeScreen(
     // Optional auto-connect. Only runs when the user previously granted the
     // system VPN consent; otherwise the panel's Connect button asks for it, so
     // the app never throws a system dialog at the user on launch.
+    //
+    // The tunnel is normally started by MainActivity.onStart() ->
+    // VpnController.onAppForeground() when `vpnAutoReconnect` is on, so this
+    // effect only covers what that path does not: a fresh connect on launch
+    // even when no previous session existed.
     LaunchedEffect(Unit) {
         val current = container.settings.current()
         if (!current.vpnAutoConnect) return@LaunchedEffect
         val profile = container.vpnStore.find(current.vpnSelectedProfileId) ?: return@LaunchedEffect
         if (container.vpn.state.value.isActive) return@LaunchedEffect
         if (container.vpn.needsSystemConsent()) return@LaunchedEffect
+        // onAppForeground() already started (or is starting) this tunnel; a
+        // second connect would only tear it down again.
+        if (current.vpnAutoReconnect) return@LaunchedEffect
         container.vpn.connect(profile)
     }
 

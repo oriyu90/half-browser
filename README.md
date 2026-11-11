@@ -42,7 +42,10 @@ Android 向けの小さな Chromium ブラウザです。ふつうのブラウ�
 | ブックマーク切替 | バーの ☰ から、アイコン付きのブックマーク一覧をボトムシートで表示し、その場で別のブックマークへ移動できます。 |
 | Web 通知 | ページの `new Notification()` / `Notification.requestPermission()` をアプリ内で受け、Android の通知として表示します（WebView は Web Notifications API を実装していないため、ページ読込前にポリフィルを注入）。許可はサイト単位で記憶。設定「Web通知を即時に受け取る」を ON にすると常駐サービスでページを動かし続け、バックグラウンドでも即時配信します。 |
 | サイトの権限 | 通知・カメラ・マイク・位置情報の許可/拒否をサイト（origin）ごとに一覧表示し、タップで切替・リセットできます。一覧に無いサイトは毎回確認します。 |
-| 設定のタブ化 | 表示 / 閲覧 / サイトの権限 / 通知 / セキュリティ / バックアップ / このアプリ の 7 タブ。 |
+| アプリ内 VPN | WireGuard プロファイルを登録し、**このアプリの通信だけ**をトンネルに通します（他のアプリは通常回線）。プロファイルは Android Keystore で暗号化して保存し、バックアップ対象外です。ホーム下部から接続・切断・再接続ができます。 |
+| VPN の疎通表示 | トンネルが上がっているかだけでなく、**サーバーが応答しているか**（ハンドシェイクの鮮度）を表示します。ホームのバッジは応答を確認できたときだけ緑になり、確認中・応答なし・再接続中を区別します。タップで最終ハンドシェイク・最終確認の詳細を表示します。 |
+| VPN の復帰時再接続 | アプリを開くたびに VPN の疎通を確認し、応答していなければ自動で再接続します（設定で OFF 可、Android の許可ダイアログは出ません）。バックグラウンドでも 15 分ごとに確認します。アイドル時の切断を防ぐため PersistentKeepalive と MTU を実行時に補正します。 |
+| 設定のタブ化 | 表示 / 閲覧 / サイトの権限 / 通知 / セキュリティ / VPN / バックアップ / このアプリ の 8 タブ。 |
 | WebView 互換 | 古い Android System WebView 向けに `Promise.withResolvers` / `AbortSignal.any` などの標準 API シムをページ読込前に注入。設定に WebView のバージョンを表示します。 |
 | プライバシー | 広告・解析・アカウントなし。JavaScript ブリッジなし。`file://` / `content://` アクセス無効。第三者の Cookie 無効。カメラ・マイク・位置情報はサイトごとに都度確認し、許可した訪問中のみ有効です。 |
 
@@ -54,7 +57,7 @@ Android 向けの小さな Chromium ブラウザです。ふつうのブラウ�
 
 ## インストール
 
-1. [Releases](https://github.com/oriyu90/half-browser/releases/latest) から `half-browser-1.5.1.apk` をダウンロードします。
+1. [Releases](https://github.com/oriyu90/half-browser/releases/latest) から `half-browser.apk`（または `half-browser-1.7.0.apk`）をダウンロードします。
 2. 端末で「提供元不明のアプリ」を許可してインストールします。
 3. 外部リンクを受け取りたい場合は、Android の設定 → アプリ → 既定のアプリ → ブラウザ で
    Half-Browser を選びます（アプリ内に既定ブラウザ設定ボタンはありません）。
@@ -145,7 +148,10 @@ an app-like bookmark home grid, per-bookmark launcher shortcuts, dark/light/syst
 backup/restore of every custom item (passwords only as a passphrase-encrypted blob),
 adaptive layouts with UI/text scaling, browsing history, saved HTML form logins, WebView
 compatibility shims for older Android System WebView builds, automatic site icons for bookmarks
-(with a monogram fallback), and a full Japanese/English UI.
+(with a monogram fallback), an in-app WireGuard VPN that routes only this app's traffic, a home-screen
+VPN status badge that shows whether the server is actually answering (not just whether the tunnel is
+up), automatic VPN reconnection when the tunnel goes stale after sleep or in the background,
+and a full Japanese/English UI.
 Search engines:
 Google, DuckDuckGo, Brave, Ecosia, Kagi and Mojeek.
 
@@ -153,6 +159,28 @@ Requires Android 8.0 (API 26) or later. MIT licensed. No ads, analytics, or acco
 See [docs/PLAN.md](docs/PLAN.md) and the [ADRs](docs/ADR/) for design decisions.
 
 ## 変更履歴
+
+### v1.8.0（2026-11-11）
+
+- **VPN の「接続中」が実態と合わない問題を修正**。トンネル（TUN）が上がった時点で「接続中」と
+  表示していましたが、WireGuard のハンドシェイクは非同期のため、サーバー停止・UDP 遮断・鍵不一致・
+  NAT 失効でも「接続中」のままでした。ハンドシェイクの鮮度から疎通を判定し、トンネル状態と分けて
+  表示します（確認中 / 通信できています / 最近応答なし / 一度も応答なし）。
+- **OS 側から切断された場合も検出**。システム設定や別 VPN による停止は DOWN コールバックが
+  失われることがあり、「接続中」のまま残っていました。コールバックと 5 秒周期の生存確認の
+  二段構えで検出し、復帰時に自動再接続します。
+- **スリープ後の切断に自動で対処**。アプリを開くたびに疎通を確認し、応答していなければ自動で
+  再接続します（設定「応答が止まったら再接続する」既定 ON）。プロセスが作り直された場合も
+  残っているトンネルを引き継ぐか、再確立します。バックグラウンドでも 15 分ごとに確認します。
+- **アイドル時の切断を防ぐ実行時補正**。`PersistentKeepalive` 未指定なら 25 秒、`MTU` 未指定なら
+  1280（1500 超は 1280 に制限）、`DNS` は先頭 3 件までに補正してからトンネルを作ります。
+  保存テキストとエクスポートはユーザーの原文のままです。
+- **ホーム画面の VPN 状態表示**。バッジは応答を確認できたときだけ緑。タップでプロファイル・疎通・
+  最終ハンドシェイク・最終確認・自動再接続スイッチ・今すぐ再接続を表示します。
+- **タイムアウト時の案内**。VPN 接続中にページがタイムアウトしたとき、原因の説明と
+  「VPN を再接続」ボタンをエラーページに出します。
+- 接続・切断の競合を世代番号で排除（遅い接続が切断後の状態を上書きしない）。
+- 日英 457/457 キー一致、JVM テスト 198 件 / 失敗 0、lint 0 errors。
 
 ### v1.7.1（2026-11-10）
 
@@ -184,7 +212,6 @@ See [docs/PLAN.md](docs/PLAN.md) and the [ADRs](docs/ADR/) for design decisions.
   バックアップ対象外）。
 - **JavaScript 攻撃対策**（alert 連打・ポップアップ連打・beforeunload トラップ・`javascript:`
   遷移の制限、送信元表示ダイアログ）。設定 → セキュリティから切り替え。
-
 ### v1.5.1（2026-11-02）
 
 - ダークモードでページを読み込む間、白い画面の代わりに黒いマスクを表示します。ライトモードの表示とページ自体の背景は変更していません。

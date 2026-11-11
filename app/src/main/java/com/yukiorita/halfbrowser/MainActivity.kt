@@ -29,6 +29,27 @@ class MainActivity : ComponentActivity() {
         routeIntent(intent)
     }
 
+    /**
+     * Every time the app comes to the front, re-verify the VPN tunnel.
+     *
+     * The tunnel device can stay up across sleep while its WireGuard session
+     * (and the NAT mapping in front of it) is gone. The controller reads the
+     * handshake time, marks the tunnel stale/unreachable, and — when the user
+     * allows it and consent is already granted — reconnects it. No system
+     * dialog is ever shown from here.
+     */
+    override fun onStart() {
+        super.onStart()
+        runCatching {
+            container.vpn.onAppForeground(container.settings.current().vpnAutoReconnect)
+        }
+    }
+
+    override fun onStop() {
+        runCatching { container.vpn.onAppBackground() }
+        super.onStop()
+    }
+
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
